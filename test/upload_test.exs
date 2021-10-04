@@ -38,6 +38,10 @@ defmodule UploadTest do
     assert Upload.generate_key("phoenix.png") =~ ~r"^[a-z0-9]{32}\.png$"
   end
 
+  test "generate_key/1 + opts" do
+    assert Upload.generate_key("phoenix.png", generate_key: false) == "phoenix.png"
+  end
+
   test "generate_key/2" do
     assert Upload.generate_key("phoenix.png", prefix: ["logos"]) =~ ~r"^logos/[a-z0-9]{32}\.png$"
   end

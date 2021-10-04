@@ -148,12 +148,19 @@ defmodule Upload do
       iex> Upload.generate_key("phoenix.png")
       "b9452178-9a54-5e99-8e64-a059b01b88cf.png"
 
+      iex> Upload.generate_key("phoenix.png", generate_key: false)
+      "phoenix.png"
+
       iex> Upload.generate_key("phoenix.png", prefix: ["logos"])
       "logos/b9452178-9a54-5e99-8e64-a059b01b88cf.png"
 
   """
   @spec generate_key(String.t(), [{:prefix, list}]) :: String.t()
-  def generate_key(filename, opts \\ []) when is_binary(filename) do
+  def generate_key(filename, opts \\ [])
+
+  def generate_key(filename, generate_key: false), do: filename
+
+  def generate_key(filename, opts) when is_binary(filename) do
     uuid = UUID.uuid4(:hex)
     ext = get_extension(filename)
 
