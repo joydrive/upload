@@ -37,7 +37,7 @@ defmodule Upload.Mixfile do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:uuid, "~> 1.1"},
+      {:elixir_uuid, "~> 1.2"},
       {:plug, ">= 0.0.0"},
 
       # S3 Adapter
