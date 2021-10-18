@@ -156,17 +156,17 @@ defmodule Upload do
 
   """
   @spec generate_key(String.t(), [{:prefix, list}]) :: String.t()
-  def generate_key(filename, opts \\ [])
+  def generate_key(filename, opts \\ []) when is_binary(filename) do
+    if Keyword.get(opts, :generate_key) do
+      uuid = UUID.uuid4(:hex)
+      ext = get_extension(filename)
 
-  def generate_key(filename, generate_key: false), do: filename
-
-  def generate_key(filename, opts) when is_binary(filename) do
-    uuid = UUID.uuid4(:hex)
-    ext = get_extension(filename)
-
-    opts
-    |> Keyword.get(:prefix, [])
-    |> Path.join(uuid <> ext)
+      opts
+      |> Keyword.get(:prefix, [])
+      |> Path.join(uuid <> ext)
+    else
+      filename
+    end
   end
 
   @doc """
