@@ -80,7 +80,7 @@ if Code.ensure_loaded?(ExAws.S3) do
           :ok
 
         {:error, reason} ->
-          {:error, "failed to delete file: #{reason}"}
+          {:error, "failed to delete file: #{inspect(reason)}"}
       end
     end
 
