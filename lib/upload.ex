@@ -79,6 +79,12 @@ defmodule Upload do
   def transfer(%__MODULE__{} = upload), do: adapter().transfer(upload)
 
   @doc """
+  Deletes the file where it is stored.
+  """
+  @spec delete(Upload.t()) :: :ok | {:error, String.t()}
+  def delete(%__MODULE__{} = upload), do: adapter().delete(upload)
+
+  @doc """
   Converts a `Plug.Upload` to an `Upload`.
 
   ## Examples
@@ -157,7 +163,7 @@ defmodule Upload do
   """
   @spec generate_key(String.t(), [{:prefix, list}]) :: String.t()
   def generate_key(filename, opts \\ []) when is_binary(filename) do
-    if Keyword.get(opts, :generate_key) do
+    if Keyword.get(opts, :generate_key, true) do
       uuid = UUID.uuid4(:hex)
       ext = get_extension(filename)
 

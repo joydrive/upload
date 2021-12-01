@@ -12,4 +12,5 @@ defmodule Upload.Adapter do
   @callback get_url(String.t()) :: String.t()
   @callback get_signed_url(String.t(), Keyword.t()) :: {:ok, String.t()} | {:error, String.t()}
   @callback transfer(Upload.t()) :: {:ok, Upload.transferred()} | {:error, String.t()}
+  @callback delete(Upload.t()) :: :ok | {:error, String.t()}
 end

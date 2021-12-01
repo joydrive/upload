@@ -59,6 +59,16 @@ defmodule Upload.Adapters.Local do
     end
   end
 
+  @impl true
+  def delete(%Upload{key: key}) do
+    filename = Path.join(storage_path(), key)
+
+    case File.rm(filename) do
+      :ok -> :ok
+      {:error, posix_error} -> {:error, inspect(posix_error)}
+    end
+  end
+
   defp join_url(a, b) do
     String.trim_trailing(a, "/") <> "/" <> String.trim_leading(b, "/")
   end

@@ -17,4 +17,9 @@ defmodule Upload.Adapters.Fake do
   def transfer(%Upload{} = upload) do
     {:ok, %Upload{upload | status: :transferred}}
   end
+
+  @impl true
+  def delete(%Upload{} = _upload) do
+    :ok
+  end
 end

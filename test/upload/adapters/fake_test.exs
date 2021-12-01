@@ -18,4 +18,8 @@ defmodule Upload.Adapters.FakeTest do
   test "transfer/1" do
     assert {:ok, %Upload{status: :transferred}} = Adapter.transfer(@upload)
   end
+
+  test "delete/1" do
+    assert :ok = Adapter.delete(@upload)
+  end
 end
