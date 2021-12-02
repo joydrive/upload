@@ -36,4 +36,11 @@ defmodule Upload.Adapters.TestTest do
   test "get_signed_url/2" do
     assert Adapter.get_signed_url("foo/bar.txt", []) == {:ok, "foo/bar.txt"}
   end
+
+  test "delete/1 removes the upload from the state" do
+    assert Adapter.get_uploads() == %{}
+    assert {:ok, %Upload{key: key}} = Adapter.transfer(@upload)
+    assert :ok = Adapter.delete(@upload)
+    assert %{} == Adapter.get_uploads()
+  end
 end

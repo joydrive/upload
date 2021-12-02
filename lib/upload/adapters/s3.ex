@@ -73,10 +73,27 @@ if Code.ensure_loaded?(ExAws.S3) do
       end
     end
 
+    @impl true
+    def delete(%Upload{key: key}) do
+      case delete_object(key) do
+        {:ok, _} ->
+          :ok
+
+        {:error, reason} ->
+          {:error, "failed to delete file: #{inspect(reason)}"}
+      end
+    end
+
     defp put_object(key, path) do
       path
       |> ExAws.S3.Upload.stream_file()
       |> ExAws.S3.upload(bucket(), key)
+      |> ExAws.request()
+    end
+
+    def delete_object(key) do
+      bucket()
+      |> ExAws.S3.delete_object(key)
       |> ExAws.request()
     end
   end

@@ -43,7 +43,8 @@ defmodule UploadTest do
   end
 
   test "generate_key/2" do
-    assert Upload.generate_key("phoenix.png", prefix: ["logos"]) =~ ~r"^logos/[a-z0-9]{32}\.png$"
+    assert Upload.generate_key("phoenix.png", prefix: ["logos"]) =~
+             ~r"^logos/[a-z0-9]{32}\.png$"
   end
 
   test "cast/1 with a %Plug.Upload{}" do

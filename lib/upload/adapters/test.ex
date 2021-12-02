@@ -45,6 +45,13 @@ defmodule Upload.Adapters.Test do
     Agent.update(__MODULE__, &Map.put(&1, upload.key, upload))
   end
 
+  @doc """
+  Removes an upload from the state.
+  """
+  def delete_upload(key) do
+    Agent.update(__MODULE__, &Map.delete(&1, key))
+  end
+
   @impl true
   def get_url(key), do: key
 
@@ -56,5 +63,11 @@ defmodule Upload.Adapters.Test do
     upload = %Upload{upload | status: :transferred}
     put_upload(upload)
     {:ok, upload}
+  end
+
+  @impl true
+  def delete(%Upload{key: key}) do
+    delete_upload(key)
+    :ok
   end
 end
