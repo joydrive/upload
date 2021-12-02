@@ -74,7 +74,7 @@ if Code.ensure_loaded?(ExAws.S3) do
     end
 
     @impl true
-    def delete(%Upload{key: key}) do
+    def delete(key) do
       case delete_object(key) do
         {:ok, _} ->
           :ok

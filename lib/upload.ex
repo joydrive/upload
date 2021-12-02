@@ -81,8 +81,8 @@ defmodule Upload do
   @doc """
   Deletes the file where it is stored.
   """
-  @spec delete(Upload.t()) :: :ok | {:error, String.t()}
-  def delete(%__MODULE__{} = upload), do: adapter().delete(upload)
+  @spec delete(String.t()) :: :ok | {:error, String.t()}
+  def delete(key), do: adapter().delete(key)
 
   @doc """
   Converts a `Plug.Upload` to an `Upload`.

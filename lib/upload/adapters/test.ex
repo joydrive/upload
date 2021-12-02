@@ -66,7 +66,7 @@ defmodule Upload.Adapters.Test do
   end
 
   @impl true
-  def delete(%Upload{key: key}) do
+  def delete(key) do
     delete_upload(key)
     :ok
   end

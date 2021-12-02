@@ -30,7 +30,7 @@ defmodule Upload.Adapters.LocalTest do
   test "delete/1" do
     assert {:ok, %Upload{key: key, status: :transferred}} = Adapter.transfer(@upload)
     assert File.exists?(Path.join(Adapter.storage_path(), key))
-    assert :ok = Adapter.delete(@upload)
+    assert :ok = Adapter.delete(key)
     refute File.exists?(Path.join(Adapter.storage_path(), key))
   end
 end
