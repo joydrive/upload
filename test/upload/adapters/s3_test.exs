@@ -54,7 +54,7 @@ defmodule Upload.Adapters.S3Test do
   test "delete/1" do
     assert {:ok, %Upload{key: key, status: :transferred}} = Adapter.transfer(@upload)
     assert {:ok, %{body: "MEATLOAF\n"}} = get_object(key)
-    assert :ok = Adapter.delete(@upload)
+    assert :ok = Adapter.delete(key)
     assert {:error, _} = get_object(key)
   end
 end

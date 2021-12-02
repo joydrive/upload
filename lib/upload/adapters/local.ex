@@ -60,7 +60,7 @@ defmodule Upload.Adapters.Local do
   end
 
   @impl true
-  def delete(%Upload{key: key}) do
+  def delete(key) do
     filename = Path.join(storage_path(), key)
 
     case File.rm(filename) do

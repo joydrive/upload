@@ -38,9 +38,10 @@ defmodule Upload.Adapters.TestTest do
   end
 
   test "delete/1 removes the upload from the state" do
-    assert Adapter.get_uploads() == %{}
     assert {:ok, %Upload{key: key}} = Adapter.transfer(@upload)
-    assert :ok = Adapter.delete(@upload)
+    refute Adapter.get_uploads() == %{}
+
+    assert :ok = Adapter.delete(key)
     assert %{} == Adapter.get_uploads()
   end
 end

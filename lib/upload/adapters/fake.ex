@@ -19,7 +19,7 @@ defmodule Upload.Adapters.Fake do
   end
 
   @impl true
-  def delete(%Upload{} = _upload) do
+  def delete(_key) do
     :ok
   end
 end
