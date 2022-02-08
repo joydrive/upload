@@ -169,10 +169,12 @@ defmodule Upload do
 
       opts
       |> Keyword.get(:prefix, [])
+      |> Path.join()
       |> Path.join(uuid <> ext)
     else
       opts
       |> Keyword.get(:prefix, [])
+      |> Path.join()
       |> Path.join(filename)
     end
   end
