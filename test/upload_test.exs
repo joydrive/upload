@@ -47,6 +47,11 @@ defmodule UploadTest do
              ~r"^logos/[a-z0-9]{32}\.png$"
   end
 
+  test "generate_key/2 with multiple prefix elements" do
+    assert Upload.generate_key("phoenix.png", prefix: ["logos", "123"]) =~
+             ~r"^logos/123/[a-z0-9]{32}\.png$"
+  end
+
   test "cast/1 with a %Plug.Upload{}" do
     assert {:ok, upload} = Upload.cast(@plug)
     assert upload.path == @plug.path
