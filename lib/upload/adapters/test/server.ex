@@ -8,9 +8,10 @@ defmodule Upload.Adapters.Test.Server do
   end
 
   def init(:ok) do
-    {:ok, %{
-      uploads: %{},
-    }}
+    {:ok,
+     %{
+       uploads: %{}
+     }}
   end
 
   #
@@ -32,11 +33,12 @@ defmodule Upload.Adapters.Test.Server do
   # GenServer callbacks
   #
   def handle_call({:put_upload, owner_pid, key, value}, _from, state) do
-    state = if is_nil(state[:uploads][owner_pid]) do
-              put_in(state, [:uploads, owner_pid], %{})
-            else
-              state
-            end
+    state =
+      if is_nil(state[:uploads][owner_pid]) do
+        put_in(state, [:uploads, owner_pid], %{})
+      else
+        state
+      end
 
     {:reply, :ok, put_in(state, [:uploads, owner_pid, key], value)}
   end
