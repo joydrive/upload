@@ -2,54 +2,56 @@ defmodule Upload.Adapters.Test do
   use Upload.Adapter
   use Agent
 
+  alias Upload.Adapters.Test.Server
+
   @moduledoc """
   An `Upload.Adapter` that keeps track of uploaded files in memory, so that
   you can make assertions.
 
+  ### Setup
+
+  Add the following to `test_helper.exs`.
+
+  ```elixir
+  Upload.Adapters.Test.start()
+  ```
+
   ### Example
 
-      test "files are uploaded" do
-        assert {:ok, _} = start_supervised(Upload.Adapters.Test)
-        assert {:ok, upload} = Upload.cast_path("/path/to/file.txt")
-        assert {:ok, upload} = Upload.transfer(upload)
-        assert map_size(Upload.Adapters.Test.get_uploads()) == 1
-      end
+  Then you can use the Upload adapter in tests.
 
-  """
-
-  @doc """
-  Starts and agent for the test adapter.
-  """
-  def start_link(_) do
-    Agent.start_link(fn -> %{} end, name: __MODULE__)
+  ```elixir
+  test "files are uploaded" do
+    assert {:ok, upload} = Upload.cast_path("/path/to/file.txt")
+    assert {:ok, upload} = Upload.transfer(upload)
+    assert map_size(Upload.Adapters.Test.get_uploads()) == 1
   end
-
-  @doc """
-  Stops the agent for the test adapter.
+  ```
   """
-  def stop(reason \\ :normal, timeout \\ :infinity) do
-    Agent.stop(__MODULE__, reason, timeout)
+
+  def start() do
+    Server.start_link(nil)
   end
 
   @doc """
   Get all uploads.
   """
   def get_uploads do
-    Agent.get(__MODULE__, fn state -> state end)
+    Server.get_uploads(self())
   end
 
   @doc """
   Add an upload to the state.
   """
   def put_upload(upload) do
-    Agent.update(__MODULE__, &Map.put(&1, upload.key, upload))
+    Server.put_upload(self(), upload.key, upload)
   end
 
   @doc """
   Removes an upload from the state.
   """
   def delete_upload(key) do
-    Agent.update(__MODULE__, &Map.delete(&1, key))
+    Server.delete_upload(self(), key)
   end
 
   @impl true

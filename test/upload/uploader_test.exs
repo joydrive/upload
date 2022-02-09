@@ -17,11 +17,6 @@ defmodule Upload.UploaderTest do
     end
   end
 
-  setup do
-    {:ok, _} = start_supervised(Upload.Adapters.Test)
-    :ok
-  end
-
   test "delegates by default" do
     assert {:ok, upload} = MyUploader.cast_path("/path/to/foo.png")
     assert {:ok, %Upload{}} = MyUploader.transfer(upload)
