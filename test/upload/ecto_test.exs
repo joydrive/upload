@@ -33,7 +33,6 @@ defmodule Upload.EctoTest do
   end
 
   setup do
-    assert {:ok, _} = start_supervised(Adapter)
     assert {:ok, upload} = Upload.cast_path(@fixture)
 
     plug_upload = %Plug.Upload{

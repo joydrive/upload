@@ -8,15 +8,6 @@ defmodule Upload.Adapters.TestTest do
   @fixture Path.expand("../../fixtures/text.txt", __DIR__)
   @upload %Upload{path: @fixture, filename: "text.txt", key: "foo/text.txt"}
 
-  setup do
-    {:ok, _} = start_supervised(Upload.Adapters.Test)
-    :ok
-  end
-
-  test "stop/2" do
-    assert :ok = Upload.Adapters.Test.stop()
-  end
-
   test "get_uploads/1 and put_upload/1" do
     assert Adapter.get_uploads() == %{}
     Adapter.put_upload(@upload)
