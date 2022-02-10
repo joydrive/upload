@@ -1,6 +1,5 @@
 defmodule Upload.Adapters.Test do
   use Upload.Adapter
-  use Agent
 
   alias Upload.Adapters.Test.Server
 
