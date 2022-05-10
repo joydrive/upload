@@ -2,7 +2,7 @@ name: Build
 on: [push]
 jobs:
   build:
-    name: Elixir ${{matrix.elixir}}
+    name: Elixir ${{matrix.elixir}} - OTP ${{matrix.otp}}
     runs-on: ubuntu-latest
 
     env:
@@ -12,10 +12,10 @@ jobs:
     strategy:
       matrix:
         elixir:
-          - "1.8.2"
-          - "1.9.4"
-          - "1.10.4"
-          - "1.11.0"
+          - "1.12.0"
+          - "1.13.0"
+        otp:
+          - "24.3.4"
 
     services:
       fake-s3:
@@ -29,7 +29,7 @@ jobs:
       - name: Setup Elixir
         uses: actions/setup-elixir@v1
         with:
-          otp-version: "22.3.4"
+          otp-version: ${{matrix.otp}}
           elixir-version: ${{matrix.elixir}}
 
       - name: Dependencies
