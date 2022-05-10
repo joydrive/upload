@@ -42,7 +42,7 @@ jobs:
         run: mix format --check-formatted
 
       - name: Test
-        run: mix coveralls.github
+        run: mix test
 
       - name: Cache dialyzer
         uses: actions/cache@v2
