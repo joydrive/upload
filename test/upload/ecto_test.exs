@@ -125,6 +125,22 @@ defmodule Upload.EctoTest do
         cast_and_upload("meatloaf", with: BrokenUploader)
       end
     end
+
+    test "casting an upload of the same filename generates a change", %{
+      plug_upload: plug_upload
+    } do
+      already_uploaded = %Company{logo: "text.txt"}
+
+      # This needs to hold for this test to be accurate.
+      assert plug_upload.filename == already_uploaded.logo
+
+      changeset =
+        already_uploaded
+        |> Ecto.Changeset.cast(%{logo: plug_upload}, [])
+        |> Upload.Ecto.cast_upload(:logo, generate_key: false)
+
+      assert changeset.changes.logo == "text.txt"
+    end
   end
 
   describe "cast_upload_path/3" do

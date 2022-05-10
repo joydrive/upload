@@ -96,7 +96,7 @@ if Code.ensure_loaded?(Ecto) do
       uploader = Keyword.get(opts, :with, Upload)
 
       changeset
-      |> put_change(field, key)
+      |> put_in([Access.key(:changes), field], key)
       |> prepare_changes(fn changeset ->
         case uploader.transfer(upload) do
           {:ok, upload} ->
