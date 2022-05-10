@@ -32,6 +32,13 @@ defmodule Upload.Adapters.Test do
     Server.start_link(nil)
   end
 
+  def child_spec(_) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, []}
+    }
+  end
+
   @doc """
   Get all uploads.
   """
