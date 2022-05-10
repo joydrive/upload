@@ -126,7 +126,7 @@ defmodule Upload.EctoTest do
       end
     end
 
-    test "casting an upload of the same filename generates a change", %{
+    test "casting an upload without changing the filename still generates a change", %{
       plug_upload: plug_upload
     } do
       already_uploaded = %Company{logo: "text.txt"}
