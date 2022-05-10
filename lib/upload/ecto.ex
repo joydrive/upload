@@ -95,8 +95,12 @@ if Code.ensure_loaded?(Ecto) do
     def put_upload(changeset, field, %Upload{status: :pending, key: key} = upload, opts) do
       uploader = Keyword.get(opts, :with, Upload)
 
+      # We use `put_in` here as the URL may stay the same but we still want to
+      # generate a change.
+      #
+      # See https://github.com/joydrive/upload/pull/5 for more details.
       changeset
-      |> put_change(field, key)
+      |> put_in([Access.key(:changes), field], key)
       |> prepare_changes(fn changeset ->
         case uploader.transfer(upload) do
           {:ok, upload} ->
