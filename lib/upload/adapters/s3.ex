@@ -16,6 +16,7 @@ if Code.ensure_loaded?(ExAws.S3) do
         config :upload, Upload.Adapters.S3,
           bucket: "mybucket", # required
           base_url: "https://mybucket.s3.amazonaws.com" # optional
+          virtual_host?: true # optional
 
     """
 
@@ -43,14 +44,16 @@ if Code.ensure_loaded?(ExAws.S3) do
 
     """
     def base_url do
-      Config.get(__MODULE__, :base_url, "https://#{bucket()}.s3.amazonaws.com")
+      if Config.get(__MODULE__, :virtual_host?, true) do
+        Config.get(__MODULE__, :base_url, "https://#{bucket()}.s3.amazonaws.com")
+      else
+        Config.get(__MODULE__, :base_url, "https://s3.amazonaws.com/#{bucket()}")
+      end
     end
 
     @impl true
     def get_url(key) do
-      base_url()
-      |> URI.merge(key)
-      |> URI.to_string()
+      base_url() <> "/" <> key
     end
 
     @impl true
