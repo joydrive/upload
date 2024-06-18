@@ -1,85 +1,88 @@
 defmodule UploadTest do
-  use ExUnit.Case
+  use Upload.DataCase
 
-  doctest Upload,
-    except: [
-      get_url: 1,
-      get_signed_url: 2,
-      transfer: 1,
-      generate_key: 2,
-      cast: 2,
-      cast_path: 2
-    ]
+  alias Upload.Test.Person
+  alias Upload.Test.Repo
 
-  @fixture Path.expand("./fixtures/text.txt", __DIR__)
-  @plug %Plug.Upload{path: @fixture, filename: "text.txt"}
+  import Ecto.Multi
+  import Upload.Multi
 
-  test "get_url/1 and transfer/1" do
-    start_supervised(Upload.Adapters.Test)
+  @path "test/fixtures/image.jpg"
+  @upload %Plug.Upload{path: @path, filename: "image.jpg"}
 
-    assert {:ok, upload} = Upload.cast_path(@fixture)
-    assert {:ok, upload} = Upload.transfer(upload)
+  describe "create_variant/3" do
+    test "create a single variant of an upload" do
+      changeset = change_person(%{avatar: @upload})
 
-    assert Upload.get_url(upload) == upload.key
-    assert Upload.get_url(upload.key) == upload.key
+      assert {:ok, %{person: person}} = upload_person(changeset)
+      assert person.avatar
+
+      {:ok, blob_variant} = Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+
+      assert blob_variant.key == "uploads/users/avatars/123/variant/small.avif"
+      assert blob_variant.key in list_uploaded_keys()
+    end
   end
 
-  test "get_signed_url/2" do
-    start_supervised(Upload.Adapters.Test)
+  describe "create_multiple_variants/3" do
+    test "create a single variant of an upload" do
+      changeset = change_person(%{avatar: @upload})
 
-    assert {:ok, upload} = Upload.cast_path(@fixture)
-    assert {:ok, upload} = Upload.transfer(upload)
+      assert {:ok, %{person: person}} = upload_person(changeset)
+      assert person.avatar
 
-    assert Upload.get_signed_url(upload) == {:ok, upload.key}
-    assert Upload.get_signed_url(upload.key) == {:ok, upload.key}
+      {:ok, [small_variant, small_avif_variant]} =
+        Upload.create_multiple_variants(
+          person.avatar,
+          [
+            "small",
+            "small_avif"
+          ],
+          &transform_image/3
+        )
+
+      assert small_variant.key == "uploads/users/avatars/123/variant/small.jpg"
+      assert small_variant.key in list_uploaded_keys()
+
+      assert small_avif_variant.key == "uploads/users/avatars/123/variant/small_avif.avif"
+      assert small_avif_variant.key in list_uploaded_keys()
+    end
   end
 
-  test "generate_key/1" do
-    assert Upload.generate_key("phoenix.png") =~ ~r"^[a-z0-9]{32}\.png$"
+  defp upload_person(changeset) do
+    new()
+    |> insert(:person, changeset)
+    |> upload(:avatar, fn ctx -> ctx.person.avatar end)
+    |> Repo.transaction()
   end
 
-  test "generate_key/1 + opts" do
-    assert Upload.generate_key("phoenix.png", generate_key: false) == "phoenix.png"
+  defp change_person(attrs) do
+    %Person{}
+    |> Person.changeset(attrs)
+    |> Upload.Changeset.cast_attachment(:avatar, key_function: &key_function/1)
   end
 
-  test "generate_key/2" do
-    assert Upload.generate_key("phoenix.png", prefix: ["logos"]) =~
-             ~r"^logos/[a-z0-9]{32}\.png$"
+  defp key_function(_changeset) do
+    "uploads/users/avatars/123"
   end
 
-  test "generate_key/2 with multiple prefix elements" do
-    assert Upload.generate_key("phoenix.png", prefix: ["logos", "123"]) =~
-             ~r"^logos/123/[a-z0-9]{32}\.png$"
+  defp transform_image(source, dest, "small") do
+    with {:ok, image} <- Image.open(source),
+         {:ok, image} <- Image.thumbnail(image, "768x480", crop: :center),
+         {:ok, _} <- Image.write(image, dest <> ".jpg"),
+         :ok <- File.cp(dest <> ".jpg", dest) do
+      File.rm(dest <> ".jpg")
+    end
   end
 
-  test "cast/1 with a %Plug.Upload{}" do
-    assert {:ok, upload} = Upload.cast(@plug)
-    assert upload.path == @plug.path
-    assert upload.filename == @plug.filename
-    assert upload.key =~ ~r"^[a-z0-9]{32}\.txt$"
-    assert upload.status == :pending
+  defp transform_image(source, dest, "small_avif") do
+    with {:ok, image} <- Image.open(source),
+         {:ok, image} <- Image.thumbnail(image, "768x480", crop: :center),
+         {:ok, _} <- Image.write(image, dest <> ".avif"),
+         :ok <- File.cp(dest <> ".avif", dest) do
+      File.rm(dest <> ".avif")
+    end
   end
 
-  test "cast/1 with an %Upload{}" do
-    assert {:ok, upload} = Upload.cast_path(@fixture)
-    assert {:ok, ^upload} = Upload.cast(upload)
-  end
-
-  test "cast/1 with something else" do
-    assert Upload.cast(100) == :error
-    assert Upload.cast(nil) == :error
-  end
-
-  test "cast_path/1 with a path" do
-    assert {:ok, upload} = Upload.cast_path(@fixture)
-    assert upload.path == @plug.path
-    assert upload.filename == @plug.filename
-    assert upload.key =~ ~r"^[a-z0-9]{32}\.txt$"
-    assert upload.status == :pending
-  end
-
-  test "cast_path/1 with something else" do
-    assert :error = Upload.cast_path(100)
-    assert :error = Upload.cast_path(nil)
-  end
+  defp small_transform_avif(source, dest, _), do: transform_image(source, dest, "small_avif")
 end

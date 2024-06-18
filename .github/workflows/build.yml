@@ -12,10 +12,9 @@ jobs:
     strategy:
       matrix:
         elixir:
-          - "1.12.0"
-          - "1.13.0"
+          - "1.16.1"
         otp:
-          - "24.3.4"
+          - "26.2.2"
 
     services:
       fake-s3:
@@ -40,6 +39,9 @@ jobs:
 
       - name: Check formatting
         run: mix format --check-formatted
+
+      - name: Credo
+        run: mix credo
 
       - name: Test
         run: mix test

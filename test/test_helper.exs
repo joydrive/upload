@@ -1,4 +1,9 @@
-{:ok, _} = Application.ensure_all_started(:hackney)
+Mix.Task.run("ecto.drop", ["--quiet", "-r", "Upload.Test.Repo"])
+Mix.Task.run("ecto.create", ["--quiet", "-r", "Upload.Test.Repo"])
+Mix.Task.run("ecto.migrate", ["--quiet", "-r", "Upload.Test.Repo"])
 
-Upload.Adapters.Test.start()
-ExUnit.start()
+{:ok, _} = Upload.Test.Vault.start_link()
+
+{:ok, _} = Upload.Test.Repo.start_link()
+Ecto.Adapters.SQL.Sandbox.mode(Upload.Test.Repo, :manual)
+ExUnit.start(exclude: [pending: true])

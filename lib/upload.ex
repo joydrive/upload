@@ -3,207 +3,162 @@ defmodule Upload do
   An opinionated file uploader.
   """
 
-  @enforce_keys [:key, :path, :filename]
-  defstruct [:key, :path, :filename, status: :pending]
+  alias Upload.Stat
+  alias Upload.Blob
 
-  @type t :: %Upload{
-          key: String.t(),
-          filename: String.t(),
-          path: String.t()
-        }
+  @spec stat(String.t() | Plug.Upload.t()) :: {:ok, Stat.t()} | {:error, any()}
+  def stat(path) when is_binary(path) do
+    Stat.stat(path)
+  end
 
-  @type transferred :: %Upload{
-          key: String.t(),
-          filename: String.t(),
-          path: String.t(),
-          status: :transferred
-        }
+  def stat(%Plug.Upload{path: path} = upload) do
+    with {:ok, stat} <- Stat.stat(path) do
+      stat =
+        stat
+        |> Stat.put(:filename, upload.filename)
+        |> Stat.put(:content_type, upload.content_type)
 
-  @type uploadable :: Plug.Upload.t() | Upload.t()
-  @type uploadable_path :: String.t() | Upload.t()
+      {:ok, stat}
+    end
+  end
 
-  @doc """
-  Get the adapter from config.
-  """
-  def adapter do
-    Upload.Config.get(__MODULE__, :adapter, Upload.Adapters.Local)
+  def stat!(path) do
+    case stat(path) do
+      {:ok, stat} ->
+        stat
+
+      {:error, reason} when is_atom(reason) ->
+        raise File.Error, path: path, reason: reason, action: "read file stats"
+
+      {:error, exception} when is_struct(exception) ->
+        raise exception
+    end
+  end
+
+  @spec variant_exists?(Blob.t(), String.t() | atom()) :: boolean()
+  def variant_exists?(%Blob{id: blob_id}, variant) do
+    import Ecto.Query
+    repo = Upload.Config.repo()
+
+    Blob
+    |> where([blob], blob.id == ^blob_id and blob.variant == ^to_string(variant))
+    |> repo.exists?()
   end
 
   @doc """
-  Get the URL for a given key. It will behave differently based
-  on the adapter you're using.
+  Creates and uploads a single variant of a blob.
 
-  ### Local
+  Calling this multiple times is not the optimal for creating multiple variants
+  of a blob at once since this function would download the original blob once
+  per variant. See `create_multiple_variants/3`.
 
-      iex> Upload.get_url("123456.png")
-      "/uploads/123456.png"
+  ## Example
 
-  ### S3
-
-      iex> Upload.get_url("123456.png")
-      "https://my_bucket_name.s3.amazonaws.com/123456.png"
-
-  ### Fake / Test
-
-      iex> Upload.get_url("123456.png")
-      "123456.png"
-
+  ```elixir
+  create_variant(original_blob, "small", &transform_fn/3)
+  ```
   """
-  @spec get_url(Upload.t() | String.t()) :: String.t()
-  def get_url(%__MODULE__{key: key}), do: get_url(key)
-  def get_url(key) when is_binary(key), do: adapter().get_url(key)
-
-  @doc """
-  Get the URL for a given key. It will behave differently based
-  on the adapter you're using.
-
-  ### Examples
-
-      iex> Upload.get_signed_url("123456.png")
-      {:ok, "http://yoururl.com/123456.png?X-Amz-Expires=3600..."}
-
-      iex> Upload.get_signed_url("123456.png", expires_in: 4200)
-      {:ok, "http://yoururl.com/123456.png?X-Amz-Expires=4200..."}
-
-  """
-  @spec get_signed_url(Upload.t() | String.t(), Keyword.t()) ::
-          {:ok, String.t()} | {:error, String.t()}
-  def get_signed_url(upload, opts \\ [])
-  def get_signed_url(%__MODULE__{key: key}, opts), do: get_signed_url(key, opts)
-  def get_signed_url(key, opts) when is_binary(key), do: adapter().get_signed_url(key, opts)
-
-  @doc """
-  Transfer the file to where it will be stored.
-  """
-  @spec transfer(Upload.t()) :: {:ok, Upload.transferred()} | {:error, String.t()}
-  def transfer(%__MODULE__{} = upload), do: adapter().transfer(upload)
-
-  @doc """
-  Deletes the file where it is stored.
-  """
-  @spec delete(String.t()) :: :ok | {:error, String.t()}
-  def delete(key), do: adapter().delete(key)
-
-  @doc """
-  Converts a `Plug.Upload` to an `Upload`.
-
-  ## Examples
-
-      iex> Upload.cast(%Plug.Upload{path: "/path/to/foo.png", filename: "foo.png"})
-      {:ok, %Upload{path: "/path/to/foo.png", filename: "foo.png", key: "123456.png"}}
-
-      iex> Upload.cast(100)
-      :error
-
-  """
-  @spec cast(uploadable, list) :: {:ok, Upload.t()} | :error
-  def cast(uploadable, opts \\ [])
-  def cast(%Upload{} = upload, _opts), do: {:ok, upload}
-
-  def cast(%Plug.Upload{filename: filename, path: path}, opts) do
-    do_cast(filename, path, opts)
-  end
-
-  def cast(_not_uploadable, _opts) do
-    :error
-  end
-
-  @doc """
-  Cast a file path to an `Upload`.
-
-  *Warning:* Do not use `cast_path` with unsanitized user input.
-
-  ## Examples
-
-      iex> Upload.cast_path("/path/to/foo.png")
-      {:ok, %Upload{path: "/path/to/foo.png", filename: "foo.png", key: "123456.png"}}
-
-      iex> Upload.cast_path(100)
-      :error
-
-  """
-  @spec cast_path(uploadable_path, list) :: {:ok, Upload.t()} | :error
-  def cast_path(path, opts \\ [])
-  def cast_path(%Upload{} = upload, _opts), do: {:ok, upload}
-
-  def cast_path(path, opts) when is_binary(path) do
-    path
-    |> Path.basename()
-    |> do_cast(path, opts)
-  end
-
-  def cast_path(_, _opts) do
-    :error
-  end
-
-  defp do_cast(filename, path, opts) do
-    {:ok,
-     %__MODULE__{
-       key: generate_key(filename, opts),
-       path: path,
-       filename: filename,
-       status: :pending
-     }}
-  end
-
-  @doc """
-  Converts a filename to a unique key.
-
-  ## Examples
-
-      iex> Upload.generate_key("phoenix.png")
-      "b9452178-9a54-5e99-8e64-a059b01b88cf.png"
-
-      iex> Upload.generate_key("phoenix.png", generate_key: false)
-      "phoenix.png"
-
-      iex> Upload.generate_key("phoenix.png", prefix: ["logos"])
-      "logos/b9452178-9a54-5e99-8e64-a059b01b88cf.png"
-
-  """
-  @spec generate_key(String.t(), [{:prefix, list}]) :: String.t()
-  def generate_key(filename, opts \\ []) when is_binary(filename) do
-    if Keyword.get(opts, :generate_key, true) do
-      uuid = UUID.uuid4(:hex)
-      ext = get_extension(filename)
-
-      opts
-      |> Keyword.get(:prefix, [])
-      |> Enum.join("/")
-      |> Path.join(uuid <> ext)
-    else
-      opts
-      |> Keyword.get(:prefix, [])
-      |> Enum.join("/")
-      |> Path.join(filename)
+  @spec create_variant(Blob.t(), String.t(), any()) :: {:ok, Blob.t()} | {:error, any()}
+  def create_variant(original_blob, variant, transform) when is_function(transform, 3) do
+    with {:ok, blob_path} <- create_random_file(),
+         :ok <- Upload.Storage.download(original_blob.key, blob_path),
+         {:ok, variant_path} <- create_random_file(),
+         :ok <- apply(transform, [blob_path, variant_path, variant]),
+         :ok <- cleanup(blob_path),
+         {:ok, blob} <- insert_variant(original_blob, variant, variant_path),
+         :ok <- cleanup(variant_path) do
+      {:ok, blob}
     end
   end
 
   @doc """
-  Gets the extension from a filename.
+  Creates multiple versions of a blob after downloading the source blob once.
+  Useful for creating multiple versions of a photo for example.
 
-  ## Examples
+  ## Example
 
-      iex> Upload.get_extension("foo.png")
-      ".png"
-
-      iex> Upload.get_extension("foo.PNG")
-      ".png"
-
-      iex> Upload.get_extension("foo")
-      ""
-
-      iex> {:ok, upload} = Upload.cast_path("/path/to/foo.png")
-      ...> Upload.get_extension(upload)
-      ".png"
-
+  ```elixir
+  create_multiple_variants(blob, ["small", "large"], &transform_fn/3)
+  ```
   """
-  @spec get_extension(String.t() | Upload.t()) :: String.t()
-  def get_extension(%Upload{filename: filename}) do
-    get_extension(filename)
+  @spec create_multiple_variants(Blob.t(), [String.t()], any()) :: any()
+  def create_multiple_variants(original_blob, variants, transform)
+      when is_function(transform, 3) do
+    with {:ok, blob_path} <- create_random_file(),
+         :ok <- Upload.Storage.download(original_blob.key, blob_path),
+         {:ok, blobs} <- insert_variants(variants, original_blob, blob_path, transform),
+         :ok <- cleanup(blob_path) do
+      {:ok, blobs}
+    end
   end
 
-  def get_extension(filename) when is_binary(filename) do
-    filename |> Path.extname() |> String.downcase()
+  defp insert_variants(variants, original_blob, blob_path, transform) do
+    Enum.reduce_while(variants, {:ok, []}, fn variant, {:ok, blobs} ->
+      with {:ok, variant_path} <- create_random_file(),
+           :ok <- apply(transform, [blob_path, variant_path, variant]),
+           {:ok, blob} <- insert_variant(original_blob, variant, variant_path),
+           :ok <- cleanup(variant_path) do
+        {:cont, {:ok, blobs ++ [blob]}}
+      else
+        {:error, error} ->
+          {:halt, {:error, "Failed to create variant #{variant} with error #{error}"}}
+      end
+    end)
   end
+
+  defp insert_variant(original_blob, variant, variant_path) do
+    if original_blob.variant do
+      raise "A variant of a blob can not be created for a blob that is already a variant"
+    end
+
+    repo = Upload.Config.repo()
+    original_key_without_ext = Path.rootname(original_blob.key)
+
+    params =
+      Upload.stat!(variant_path)
+      |> Map.put(params, :variant, variant)
+      |> Map.put(params, :original_blob_id, original_blob.id)
+      |> Map.put(params, :key, original_key_without_ext <> "/variant/" <> to_string(variant))
+      |> Map.put(params, :filename, variant_filename(original_blob, variant))
+
+    changeset = Blob.changeset(%Blob{}, params)
+
+    repo.insert(changeset)
+  end
+
+  defp variant_filename(original_blob, variant) do
+    original_ext = Path.extname(original_blob.filename)
+    without_ext = Path.rootname(original_blob.filename)
+
+    without_ext <> "_" <> to_string(variant) <> original_ext
+  end
+
+  defp create_random_file do
+    case Plug.Upload.random_file("upload") do
+      {:ok, tmp} -> {:ok, tmp}
+      reason -> {:error, %Upload.RandomFileError{reason: reason}}
+    end
+  end
+
+  defp cleanup(path) do
+    with {:error, reason} <- File.rm(path) do
+      %File.Error{path: path, reason: reason, action: "remove temporary file"}
+    end
+  end
+
+  # *  `:cache_control`
+  # *  `:content_disposition`
+  # *  `:content_encoding`
+  # *  `:content_length`
+  # *  `:content_type`
+  # *  `:expect`
+  # *  `:expires`
+  # *  `:storage_class`
+  # *  `:website_redirect_location`
+  # *  `:encryption` (set to "AES256" for encryption at rest)
+  # defp set_headers(blob) do
+  # end
+
+  # def put_acl(blob) do
+  # end
 end
