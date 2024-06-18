@@ -55,7 +55,7 @@ defmodule Upload.Changeset do
     key =
       case Keyword.get(opts, :key_function) do
         nil -> nil
-        key_function when is_function(key_function, 1) -> apply(key_function, [changeset])
+        key_function when is_function(key_function, 1) -> key_function.(changeset)
         _ -> raise ArgumentError, "key_function must be a function of arity 1."
       end
 

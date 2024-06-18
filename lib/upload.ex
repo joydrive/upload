@@ -3,8 +3,8 @@ defmodule Upload do
   An opinionated file uploader.
   """
 
-  alias Upload.Stat
   alias Upload.Blob
+  alias Upload.Stat
 
   @spec stat(String.t() | Plug.Upload.t()) :: {:ok, Stat.t()} | {:error, any()}
   def stat(path) when is_binary(path) do
@@ -59,11 +59,11 @@ defmodule Upload do
   ```
   """
   @spec create_variant(Blob.t(), String.t(), any()) :: {:ok, Blob.t()} | {:error, any()}
-  def create_variant(original_blob, variant, transform) when is_function(transform, 3) do
+  def create_variant(original_blob, variant, transform_fn) when is_function(transform_fn, 3) do
     with {:ok, blob_path} <- create_random_file(),
          :ok <- Upload.Storage.download(original_blob.key, blob_path),
          {:ok, variant_path} <- create_random_file(),
-         :ok <- apply(transform, [blob_path, variant_path, variant]),
+         :ok <- transform_fn.(blob_path, variant_path, variant),
          :ok <- cleanup(blob_path),
          {:ok, blob} <- insert_variant(original_blob, variant, variant_path),
          :ok <- cleanup(variant_path) do
@@ -92,10 +92,10 @@ defmodule Upload do
     end
   end
 
-  defp insert_variants(variants, original_blob, blob_path, transform) do
+  defp insert_variants(variants, original_blob, blob_path, transform_fn) do
     Enum.reduce_while(variants, {:ok, []}, fn variant, {:ok, blobs} ->
       with {:ok, variant_path} <- create_random_file(),
-           :ok <- apply(transform, [blob_path, variant_path, variant]),
+           :ok <- transform_fn.([blob_path, variant_path, variant]),
            {:ok, blob} <- insert_variant(original_blob, variant, variant_path),
            :ok <- cleanup(variant_path) do
         {:cont, {:ok, blobs ++ [blob]}}

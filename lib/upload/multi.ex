@@ -3,11 +3,10 @@ defmodule Upload.Multi do
   Functions to help uploading and removing of blobs as part of an `Ecto.Multi`.
   """
 
+  alias Ecto.Association.NotLoaded
+  alias Ecto.Multi
   alias Upload.Blob
   alias Upload.Storage
-
-  alias Ecto.Multi
-  alias Ecto.Association.NotLoaded
 
   @doc """
   Upload a blob to storage.

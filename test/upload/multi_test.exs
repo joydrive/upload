@@ -1,8 +1,8 @@
 defmodule Upload.MultiTest do
   use Upload.DataCase
 
-  alias Upload.Test.Repo
   alias Upload.Test.Person
+  alias Upload.Test.Repo
 
   import Ecto.Multi
   import Upload.Multi

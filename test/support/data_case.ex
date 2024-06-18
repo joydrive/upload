@@ -3,9 +3,9 @@ defmodule Upload.DataCase do
 
   use ExUnit.CaseTemplate
 
-  alias Upload.Test.Repo
-  alias FileStore.Adapters.Memory
   alias Ecto.Adapters.SQL.Sandbox
+  alias FileStore.Adapters.Memory
+  alias Upload.Test.Repo
 
   using do
     quote do
