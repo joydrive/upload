@@ -115,11 +115,13 @@ defmodule Upload do
     original_key_without_ext = Path.rootname(original_blob.key)
 
     params =
-      Upload.stat!(variant_path)
-      |> Map.put(params, :variant, variant)
-      |> Map.put(params, :original_blob_id, original_blob.id)
-      |> Map.put(params, :key, original_key_without_ext <> "/variant/" <> to_string(variant))
-      |> Map.put(params, :filename, variant_filename(original_blob, variant))
+      variant_path
+      |> Upload.stat!()
+      |> Map.from_struct()
+      |> Map.put(:variant, variant)
+      |> Map.put(:original_blob_id, original_blob.id)
+      |> Map.put(:key, original_key_without_ext <> "/variant/" <> to_string(variant))
+      |> Map.put(:filename, variant_filename(original_blob, variant))
 
     changeset = Blob.changeset(%Blob{}, params)
 
