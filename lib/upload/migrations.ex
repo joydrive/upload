@@ -1,7 +1,20 @@
-defmodule Upload.Test.Repo.Migrations.Setup do
+defmodule Upload.Migrations do
+  @moduledoc """
+  Performs database migrations required for the Upload library.
+
+  ```elxiir
+  defmodule MyApp.Repo.Migrations.AddUpload do
+    use Ecto.Migration
+
+    def up, do: Upload.Migrations.up()
+
+    def down, do: Upload.Migrations.down()
+  end
+  ```
+  """
   use Ecto.Migration
 
-  def change do
+  def up do
     create table(:blobs, primary_key: false) do
       add(:id, :binary_id, primary_key: true)
       add(:key, :string, null: false)
@@ -30,11 +43,15 @@ defmodule Upload.Test.Repo.Migrations.Setup do
     unique_index(:blobs, [:variant, :original_blob_id],
       comment: "There can only be one variant per blob with the same variant name."
     )
+  end
 
-    create table(:people) do
-      add(:avatar_id, references(:blobs, on_delete: :nilify_all, type: :binary_id),
-        type: :binary_id
-      )
-    end
+  def down do
+    drop table(:blobs)
+
+    drop unique_index(:blobs, :key)
+
+    drop unique_index(:blobs, [:variant, :original_blob_id],
+      comment: "There can only be one variant per blob with the same variant name."
+    )
   end
 end
