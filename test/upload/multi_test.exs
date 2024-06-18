@@ -101,7 +101,7 @@ defmodule Upload.MultiTest do
          {:ok, image} <- Image.thumbnail(image, "768x480", crop: :center),
          {:ok, _} <- Image.write(image, dest <> ".avif"),
          :ok <- File.cp(dest <> ".avif", dest) do
-          File.rm(dest <> ".avif")
+      File.rm(dest <> ".avif")
     end
   end
 end

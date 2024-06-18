@@ -60,7 +60,7 @@ defmodule Upload.Stat do
   end
 
   defp get_byte_size(path) do
-    case File.stat(path, time: :posix)  do
+    case File.stat(path, time: :posix) do
       {:ok, %File.Stat{size: size, type: :regular}} -> {:ok, size}
       {:ok, _} -> {:error, :eisdir}
       {:error, reason} -> {:error, reason}

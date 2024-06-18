@@ -46,12 +46,14 @@ defmodule Upload.Migrations do
   end
 
   def down do
-    drop table(:blobs)
+    drop(table(:blobs))
 
-    drop unique_index(:blobs, :key)
+    drop(unique_index(:blobs, :key))
 
-    drop unique_index(:blobs, [:variant, :original_blob_id],
-      comment: "There can only be one variant per blob with the same variant name."
+    drop(
+      unique_index(:blobs, [:variant, :original_blob_id],
+        comment: "There can only be one variant per blob with the same variant name."
+      )
     )
   end
 end
