@@ -18,7 +18,7 @@ defmodule Upload.Mixfile do
       preferred_cli_env: [
         coveralls: :test,
         "coveralls.detail": :test,
-        "coveralls.html": :test,
+        "coveralls.html": :test
       ]
     ]
   end
@@ -59,7 +59,7 @@ defmodule Upload.Mixfile do
 
       # Test dependencies for this package
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.22", only: :dev, runtime: false},
       {:excoveralls, "~> 0.18", only: :test},
       {:mix_test_watch, "~> 1.0", only: :dev, runtime: false}

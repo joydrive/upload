@@ -12,9 +12,9 @@ defmodule Upload.Changeset do
 
   import Ecto.Changeset
 
-  @type changeset :: Ecto.t()
+  @type changeset :: Ecto.Changeset.t()
   @type field :: atom
-  @type error :: binary | Changeset.error()
+  @type error :: binary | Ecto.Changeset.error()
   @type validation :: (any -> [error])
   @type size :: {number, :byte | :kilobyte | :megabyte | :gigabyte | :terabyte}
 

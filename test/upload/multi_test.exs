@@ -92,7 +92,8 @@ defmodule Upload.MultiTest do
 
       assert {:ok, %{person: person}} = upload_person(changeset)
 
-      {:ok, _blob_variant} = Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+      {:ok, _blob_variant} =
+        Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
 
       :ok = Storage.delete_all()
 

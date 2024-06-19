@@ -1,7 +1,8 @@
 defmodule Upload.BlobTest do
   use Upload.DataCase, async: true
-  alias Upload.Test.Repo
+
   alias Upload.Blob
+  alias Upload.Test.Repo
 
   @attributes %{
     path: "test/fixtures/test.txt",
