@@ -59,6 +59,23 @@ defmodule Upload.ChangesetTest do
       refute changeset.valid?
       assert changeset.errors[:avatar] == @required_custom
     end
+
+    test "raises when the key_function option is not a function" do
+      assert_raise(ArgumentError, fn ->
+        change_person(%{avatar: nil}, key_function: :foo)
+      end)
+    end
+  end
+
+  describe "validate_attchment/4" do
+    test "does nothing when there is no change" do
+      changeset =
+        %{avatar: @upload}
+        |> change_person()
+        |> validate_attachment(:avatar, :variant, fn _ -> :ok end)
+
+      assert changeset.valid?
+    end
   end
 
   describe "validate_attachment_type/4" do
@@ -86,23 +103,27 @@ defmodule Upload.ChangesetTest do
       assert changeset.errors ==
                [avatar: {"is not a supported file type", [allowed: ["image/png"]]}]
     end
-
-    @tag :pending
-    test "forbid"
-
-    @tag :pending
-    test "accepts a custom message"
   end
 
   describe "validate_attachment_size/3" do
-    @tag :pending
-    test "less than"
+    test "fails the image is larger than the specified maximum size" do
+      changeset =
+        %{avatar: @upload}
+        |> change_person(required: true)
+        |> validate_attachment_size(:avatar, smaller_than: {1, :megabyte})
 
-    @tag :pending
-    test "greater than"
+      refute changeset.valid?
+      assert errors_on(changeset) == %{avatar: ["must be smaller than 1 megabyte(s)"]}
+    end
 
-    @tag :pending
-    test "accepts a custom message"
+    test "succeeds when the image is smaller than the specified maximum size" do
+      changeset =
+        %{avatar: @upload}
+        |> change_person(required: true)
+        |> validate_attachment_size(:avatar, smaller_than: {2, :megabyte})
+
+      assert changeset.valid?
+    end
   end
 
   defp change_person(attrs, opts \\ []) do

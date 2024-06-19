@@ -22,8 +22,6 @@ defmodule Upload.Stat do
   @doc false
   @spec stat(Path.t()) :: {:ok, t()} | {:error, error()}
   def stat(path) do
-    # dbg(path)
-
     with {:ok, byte_size} <- get_byte_size(path),
          {:ok, checksum} <- compute_checksum(path),
          {:ok, detected_type} <- detect_type(path),
@@ -96,15 +94,7 @@ defmodule Upload.Stat do
   end
 
   defp analyze(path, content_type) do
-    # analyzers =
-    #   case Application.fetch_env(:upload, :analyze) do
-    #     {:ok, true} -> [Image, Video]
-    #     {:ok, false} -> []
-    #     {:ok, providers} -> providers
-    #     :error -> []
-    #   end
-
-    analyzers = [Upload.Stat.Image]
+    analyzers = Upload.Config.analyzers()
 
     Enum.find_value(analyzers, {:ok, nil}, fn analyzer ->
       case analyzer.stat(path, content_type) do

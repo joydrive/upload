@@ -23,6 +23,7 @@ defmodule Upload.Blob do
           metadata: map(),
           path: binary() | nil,
           variant: binary() | nil,
+          variants: [Upload.Blob.t()] | Ecto.Association.NotLoaded.t(),
           original_blob_id: id() | nil,
           original_blob: Upload.Blob.t() | Ecto.Association.NotLoaded.t() | nil
         }
@@ -59,6 +60,7 @@ defmodule Upload.Blob do
     |> validate_required(@required_fields)
     |> add_extension_from_mime()
     |> foreign_key_constraint(:original_blob_id)
+    |> validate_original_blob_id_is_not_variant()
     |> check_constraint(:variant, name: :variant_and_original_blob_id_are_only_nullable_together)
     |> maybe_upload()
     |> maybe_delete()
@@ -75,7 +77,7 @@ defmodule Upload.Blob do
     mime = get_field(changeset, :content_type)
     extension = MIME.extensions(mime) |> List.first()
 
-    if mime do
+    if mime && extension do
       update_change(changeset, :key, fn key ->
         key <> "." <> extension
       end)
@@ -108,7 +110,7 @@ defmodule Upload.Blob do
   defp maybe_delete(changeset) do
     prepare_changes(changeset, fn changeset ->
       if changeset.action == :delete do
-        :ok =
+        {:ok, _} =
           Ecto.Multi.new()
           |> Upload.Multi.purge(:blob, changeset.data)
           |> Upload.Config.repo().transaction()
@@ -116,5 +118,25 @@ defmodule Upload.Blob do
 
       changeset
     end)
+  end
+
+  defp validate_original_blob_id_is_not_variant(changeset) do
+    repo = Upload.Config.repo()
+
+    case get_change(changeset, :original_blob_id) do
+      nil ->
+        changeset
+
+      original_blob_id ->
+        if repo.get_by(__MODULE__, id: original_blob_id).variant do
+          add_error(
+            changeset,
+            :original_blob_id,
+            "Can not set original_blob_id to a variant blob."
+          )
+        else
+          changeset
+        end
+    end
   end
 end

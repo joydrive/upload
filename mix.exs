@@ -14,6 +14,11 @@ defmodule Upload.Mixfile do
       dialyzer: [
         plt_add_apps: [:ecto, :ex_aws, :ex_aws_s3],
         plt_file: {:no_warn, "priv/plts/dialyzer.plt"}
+      ],
+      preferred_cli_env: [
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.html": :test,
       ]
     ]
   end
@@ -56,7 +61,7 @@ defmodule Upload.Mixfile do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.22", only: :dev, runtime: false},
-      {:excoveralls, "~> 0.13", only: :test},
+      {:excoveralls, "~> 0.18", only: :test},
       {:mix_test_watch, "~> 1.0", only: :dev, runtime: false}
     ]
   end

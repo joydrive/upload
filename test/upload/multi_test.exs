@@ -1,6 +1,7 @@
 defmodule Upload.MultiTest do
   use Upload.DataCase
 
+  alias Upload.Storage
   alias Upload.Test.Person
   alias Upload.Test.Repo
 
@@ -40,6 +41,21 @@ defmodule Upload.MultiTest do
     assert blob_variant.original_blob_id == person.avatar.id
   end
 
+  test "delete a variant of an upload" do
+    changeset = change_person(%{avatar: @upload})
+    assert {:ok, %{person: person}} = upload_person(changeset)
+
+    assert person.avatar
+
+    {:ok, blob_variant} = Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+    assert blob_variant.key in list_uploaded_keys()
+
+    assert match?(%Upload.Blob{}, Repo.delete!(Upload.Blob.changeset(blob_variant, %{})))
+
+    refute blob_variant.key in list_uploaded_keys()
+    assert person.avatar.key in list_uploaded_keys()
+  end
+
   test "upload/3 when avatar is not provided" do
     changeset = change_person(%{})
     assert {:ok, %{person: person}} = upload_person(changeset)
@@ -69,6 +85,18 @@ defmodule Upload.MultiTest do
       assert {:ok, _} = purge_person(person)
 
       refute blob_variant.key in list_uploaded_keys()
+    end
+
+    test "does not fail when files are missing in the storage" do
+      changeset = change_person(%{avatar: @upload})
+
+      assert {:ok, %{person: person}} = upload_person(changeset)
+
+      {:ok, _blob_variant} = Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+
+      :ok = Storage.delete_all()
+
+      assert {:ok, _} = purge_person(person)
     end
   end
 

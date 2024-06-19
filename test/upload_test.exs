@@ -22,6 +22,37 @@ defmodule UploadTest do
       assert blob_variant.key == "uploads/users/avatars/123/variant/small.avif"
       assert blob_variant.key in list_uploaded_keys()
     end
+
+    test "replacing a single variant of an upload deletes the old one" do
+      changeset = change_person(%{avatar: @upload})
+
+      assert {:ok, %{person: person}} = upload_person(changeset)
+      assert person.avatar
+
+      {:ok, blob_variant1} =
+        Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+
+      assert blob_variant1.key in list_uploaded_keys()
+
+      {:ok, blob_variant2} =
+        Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+
+      assert blob_variant2.key in list_uploaded_keys()
+    end
+  end
+
+  describe "variant_exists?/2" do
+    test "returns if a variant exists for a blob" do
+      changeset = change_person(%{avatar: @upload})
+
+      assert {:ok, %{person: person}} = upload_person(changeset)
+
+      refute Upload.variant_exists?(person.avatar, "small")
+
+      {:ok, _} = Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+
+      assert Upload.variant_exists?(person.avatar, "small")
+    end
   end
 
   describe "create_multiple_variants/3" do
@@ -49,6 +80,17 @@ defmodule UploadTest do
     end
   end
 
+  describe "put_access_control_list/2" do
+    test "can set the ACL for an uploaded blob" do
+      changeset = change_person(%{avatar: @upload})
+
+      assert {:ok, %{person: person}} = upload_person(changeset)
+      assert person.avatar
+
+      :ok = Upload.put_access_control_list(person.avatar, "public_read")
+    end
+  end
+
   defp upload_person(changeset) do
     new()
     |> insert(:person, changeset)
@@ -56,10 +98,12 @@ defmodule UploadTest do
     |> Repo.transaction()
   end
 
-  defp change_person(attrs) do
+  defp change_person(attrs, opts \\ []) do
+    key_function = Keyword.get(opts, :key_function, &key_function/1)
+
     %Person{}
     |> Person.changeset(attrs)
-    |> Upload.Changeset.cast_attachment(:avatar, key_function: &key_function/1)
+    |> Upload.Changeset.cast_attachment(:avatar, key_function: key_function)
   end
 
   defp key_function(_changeset) do

@@ -6,6 +6,8 @@ defmodule Upload do
   alias Upload.Blob
   alias Upload.Stat
 
+  import Ecto.Query
+
   @spec stat(String.t() | Plug.Upload.t()) :: {:ok, Stat.t()} | {:error, any()}
   def stat(path) when is_binary(path) do
     Stat.stat(path)
@@ -37,12 +39,20 @@ defmodule Upload do
 
   @spec variant_exists?(Blob.t(), String.t() | atom()) :: boolean()
   def variant_exists?(%Blob{id: blob_id}, variant) do
-    import Ecto.Query
     repo = Upload.Config.repo()
 
     Blob
-    |> where([blob], blob.id == ^blob_id and blob.variant == ^to_string(variant))
+    |> where([blob], blob.original_blob_id == ^blob_id and blob.variant == ^to_string(variant))
     |> repo.exists?()
+  end
+
+  @spec get_variant(Blob.t(), String.t() | atom()) :: nil | Blob.t()
+  def get_variant(%Blob{id: blob_id}, variant) do
+    repo = Upload.Config.repo()
+
+    Blob
+    |> where([blob], blob.original_blob_id == ^blob_id and blob.variant == ^to_string(variant))
+    |> repo.one()
   end
 
   @doc """
@@ -60,15 +70,15 @@ defmodule Upload do
   """
   @spec create_variant(Blob.t(), String.t(), any()) :: {:ok, Blob.t()} | {:error, any()}
   def create_variant(original_blob, variant, transform_fn) when is_function(transform_fn, 3) do
-    with {:ok, blob_path} <- create_random_file(),
-         :ok <- Upload.Storage.download(original_blob.key, blob_path),
-         {:ok, variant_path} <- create_random_file(),
-         :ok <- transform_fn.(blob_path, variant_path, variant),
-         :ok <- cleanup(blob_path),
-         {:ok, blob} <- insert_variant(original_blob, variant, variant_path),
-         :ok <- cleanup(variant_path) do
-      {:ok, blob}
-    end
+    repo = Upload.Config.repo()
+
+    {:ok, multi_result} =
+      Ecto.Multi.new()
+      |> Upload.Multi.remove_existing_variant(original_blob, variant)
+      |> Upload.Multi.download_and_insert_variant(original_blob, variant, transform_fn)
+      |> repo.transaction()
+
+    Map.fetch!(multi_result, "download_and_insert_#{variant}")
   end
 
   @doc """
@@ -82,85 +92,50 @@ defmodule Upload do
   ```
   """
   @spec create_multiple_variants(Blob.t(), [String.t()], any()) :: any()
-  def create_multiple_variants(original_blob, variants, transform)
-      when is_function(transform, 3) do
-    with {:ok, blob_path} <- create_random_file(),
-         :ok <- Upload.Storage.download(original_blob.key, blob_path),
-         {:ok, blobs} <- insert_variants(variants, original_blob, blob_path, transform),
-         :ok <- cleanup(blob_path) do
-      {:ok, blobs}
-    end
-  end
-
-  defp insert_variants(variants, original_blob, blob_path, transform_fn) do
-    Enum.reduce_while(variants, {:ok, []}, fn variant, {:ok, blobs} ->
-      with {:ok, variant_path} <- create_random_file(),
-           :ok <- transform_fn.([blob_path, variant_path, variant]),
-           {:ok, blob} <- insert_variant(original_blob, variant, variant_path),
-           :ok <- cleanup(variant_path) do
-        {:cont, {:ok, blobs ++ [blob]}}
-      else
-        {:error, error} ->
-          {:halt, {:error, "Failed to create variant #{variant} with error #{error}"}}
-      end
-    end)
-  end
-
-  defp insert_variant(original_blob, variant, variant_path) do
-    if original_blob.variant do
-      raise "A variant of a blob can not be created for a blob that is already a variant"
-    end
-
+  def create_multiple_variants(original_blob, variants, transform_fn)
+      when is_function(transform_fn, 3) do
     repo = Upload.Config.repo()
-    original_key_without_ext = Path.rootname(original_blob.key)
+    multi = Ecto.Multi.new()
 
-    params =
-      variant_path
-      |> Upload.stat!()
-      |> Map.from_struct()
-      |> Map.put(:variant, variant)
-      |> Map.put(:original_blob_id, original_blob.id)
-      |> Map.put(:key, original_key_without_ext <> "/variant/" <> to_string(variant))
-      |> Map.put(:filename, variant_filename(original_blob, variant))
+    {:ok, multi_result} =
+      variants
+      |> Enum.reduce(multi, fn variant, multi ->
+        multi
+        |> Upload.Multi.remove_existing_variant(original_blob, variant)
+        |> Upload.Multi.download_and_insert_variant(original_blob, variant, transform_fn)
+      end)
+      |> repo.transaction()
 
-    changeset = Blob.changeset(%Blob{}, params)
-
-    repo.insert(changeset)
+    {:ok,
+     Enum.map(variants, fn variant ->
+       {:ok, result} = multi_result["download_and_insert_#{variant}"]
+       result
+     end)}
   end
 
-  defp variant_filename(original_blob, variant) do
-    original_ext = Path.extname(original_blob.filename)
-    without_ext = Path.rootname(original_blob.filename)
+  @doc """
+  Set the visiblity of a `Blob` using the struct or it's key.
 
-    without_ext <> "_" <> to_string(variant) <> original_ext
+  This only applies when Upload is configured to use S3.
+
+  Supported access control lists for Amazon S3 are:
+
+  | ACL                          | Permissions Added to ACL                                                        |
+  |------------------------------|---------------------------------------------------------------------------------|
+  | "private"                    | Owner gets `FULL_CONTROL`. No one else has access rights (default).             |
+  | "public_read"                | Owner gets `FULL_CONTROL`. The `AllUsers` group gets READ access.               |
+  | "public_read_write"          | Owner gets `FULL_CONTROL`. The `AllUsers` group gets `READ` and `WRITE` access. |
+  |                              | Granting this on a bucket is generally not recommended.                         |
+  | "authenticated_read"         | Owner gets `FULL_CONTROL`. The `AuthenticatedUsers` group gets `READ` access.   |
+  | "bucket_owner_read"          | Object owner gets `FULL_CONTROL`. Bucket owner gets `READ` access.              |
+  | "bucket_owner_full_control"  | Both the object owner and the bucket owner get `FULL_CONTROL` over the object.  |
+  """
+  @spec put_access_control_list(Blob.t() | Blob.key(), String.t()) :: :ok | {:error, term()}
+  def put_access_control_list(%Blob{key: key}, acl) do
+    put_access_control_list(key, acl)
   end
 
-  defp create_random_file do
-    case Plug.Upload.random_file("upload") do
-      {:ok, tmp} -> {:ok, tmp}
-      reason -> {:error, %Upload.RandomFileError{reason: reason}}
-    end
+  def put_access_control_list(key, acl) do
+    Upload.Storage.put_access_control_list(key, acl)
   end
-
-  defp cleanup(path) do
-    with {:error, reason} <- File.rm(path) do
-      %File.Error{path: path, reason: reason, action: "remove temporary file"}
-    end
-  end
-
-  # *  `:cache_control`
-  # *  `:content_disposition`
-  # *  `:content_encoding`
-  # *  `:content_length`
-  # *  `:content_type`
-  # *  `:expect`
-  # *  `:expires`
-  # *  `:storage_class`
-  # *  `:website_redirect_location`
-  # *  `:encryption` (set to "AES256" for encryption at rest)
-  # defp set_headers(blob) do
-  # end
-
-  # def put_acl(blob) do
-  # end
 end

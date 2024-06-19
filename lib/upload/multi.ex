@@ -62,4 +62,69 @@ defmodule Upload.Multi do
 
     :ok
   end
+
+  def remove_existing_variant(multi, original_blob, variant) do
+    case Upload.get_variant(original_blob, variant) do
+      nil ->
+        multi
+
+      existing_variant_blob ->
+        purge(multi, :remove_existing_variant, existing_variant_blob)
+    end
+  end
+
+  def download_and_insert_variant(multi, original_blob, variant, transform_fn) do
+    Multi.run(multi, "download_and_insert_#{variant}", fn repo, _ ->
+      with {:ok, blob_path} <- create_random_file(),
+           :ok <- Upload.Storage.download(original_blob.key, blob_path),
+           {:ok, variant_path} <- create_random_file(),
+           :ok <- transform_fn.(blob_path, variant_path, variant),
+           :ok <- cleanup(blob_path),
+           {:ok, blob} <- insert_variant(repo, original_blob, variant, variant_path),
+           :ok <- cleanup(variant_path) do
+        {:ok, blob}
+      end
+    end)
+  end
+
+  defp insert_variant(repo, original_blob, variant, variant_path) do
+    if original_blob.variant do
+      raise "A variant of a blob can not be created for a blob that is already a variant"
+    end
+
+    original_key_without_ext = Path.rootname(original_blob.key)
+
+    params =
+      variant_path
+      |> Upload.stat!()
+      |> Map.from_struct()
+      |> Map.put(:variant, variant)
+      |> Map.put(:original_blob_id, original_blob.id)
+      |> Map.put(:key, original_key_without_ext <> "/variant/" <> to_string(variant))
+      |> Map.put(:filename, variant_filename(original_blob, variant))
+
+    changeset = Blob.changeset(%Blob{}, params)
+
+    {:ok, repo.insert(changeset)}
+  end
+
+  defp variant_filename(original_blob, variant) do
+    original_ext = Path.extname(original_blob.filename)
+    without_ext = Path.rootname(original_blob.filename)
+
+    without_ext <> "_" <> to_string(variant) <> original_ext
+  end
+
+  defp create_random_file do
+    case Plug.Upload.random_file("upload") do
+      {:ok, tmp} -> {:ok, tmp}
+      reason -> {:error, %Upload.RandomFileError{reason: reason}}
+    end
+  end
+
+  defp cleanup(path) do
+    with {:error, reason} <- File.rm(path) do
+      %File.Error{path: path, reason: reason, action: "remove temporary file"}
+    end
+  end
 end

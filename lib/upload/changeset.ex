@@ -109,11 +109,6 @@ defmodule Upload.Changeset do
     end)
   end
 
-  @spec validate_attachment_image_dimensions(changeset, field, size_opts) :: changeset
-  def validate_attachment_image_dimensions(_changeset, _field, _opts) do
-    # TODO
-  end
-
   @spec validate_attachment_size(changeset, field, size_opts) :: changeset
   def validate_attachment_size(changeset, field, opts) do
     size = {number, unit} = Keyword.fetch!(opts, :smaller_than)
@@ -122,7 +117,7 @@ defmodule Upload.Changeset do
 
     validate_attachment(changeset, field, :byte_size, fn
       byte_size when byte_size < max_byte_size -> []
-      _ -> [{message, number: number, unit: unit}]
+      _ -> [{field, {message, number: number, unit: unit}}]
     end)
   end
 
