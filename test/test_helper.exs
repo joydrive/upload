@@ -1,6 +1,6 @@
-Mix.Task.run("ecto.drop", ["--quiet", "-r", "Upload.Test.Repo"])
-Mix.Task.run("ecto.create", ["--quiet", "-r", "Upload.Test.Repo"])
-Mix.Task.run("ecto.migrate", ["--quiet", "-r", "Upload.Test.Repo"])
+Mix.Task.run("ecto.drop", ["-r", "Upload.Test.Repo"])
+Mix.Task.run("ecto.create", ["-r", "Upload.Test.Repo"])
+Mix.Task.run("ecto.migrate", ["-r", "Upload.Test.Repo"])
 
 {:ok, _} = Upload.Test.Vault.start_link()
 
