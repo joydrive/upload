@@ -1,5 +1,10 @@
 name: Build
+
 on: [push]
+
+env:
+  MIX_ENV: test
+
 jobs:
   build:
     name: Elixir ${{matrix.elixir}} - OTP ${{matrix.otp}}
