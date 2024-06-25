@@ -2,9 +2,6 @@ name: Build
 
 on: [push]
 
-env:
-  MIX_ENV: test
-
 jobs:
   build:
     name: Elixir ${{matrix.elixir}} - OTP ${{matrix.otp}}
@@ -72,4 +69,4 @@ jobs:
           key: plts-${{ matrix.elixir }}
 
       - name: Dialyzer
-        run: mix dialyzer
+        run: MIX_ENV=dev mix dialyzer
