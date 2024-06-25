@@ -7,7 +7,10 @@ config :upload, Upload.Test.Repo,
   adapter: Ecto.Adapters.Postgres,
   database: "upload_test",
   pool: Ecto.Adapters.SQL.Sandbox,
-  priv: "test/support/"
+  priv: "test/support/",
+  username: "postgres",
+  password: "postgres",
+  hostname: "localhost"
 
 config :upload, Upload.Test.Vault,
   ciphers: [
