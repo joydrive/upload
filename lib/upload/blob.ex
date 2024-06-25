@@ -77,7 +77,7 @@ defmodule Upload.Blob do
     mime = get_field(changeset, :content_type)
     extension = MIME.extensions(mime) |> List.first()
 
-    if mime && extension do
+    if extension do
       update_change(changeset, :key, fn key ->
         key <> "." <> extension
       end)
@@ -88,6 +88,7 @@ defmodule Upload.Blob do
 
   defp add_extension_from_mime(changeset), do: changeset
 
+  @doc false
   def change_blob(%Stat{} = stat, key) do
     changeset(
       %__MODULE__{},

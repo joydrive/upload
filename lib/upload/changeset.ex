@@ -1,8 +1,12 @@
 defmodule Upload.Changeset do
   @moduledoc """
-  Functions to use with changesets to upload an attachment on a schema.
+  Functions for use with changesets to upload and validate attachments.
 
   ```elixir
+  schema "people" do
+    belongs_to(:avatar, Upload.Blob, on_replace: :delete, type: :binary_id)
+  end
+
   %Person{}
   |> Person.changeset(%{avatar: upload})
   |> cast_attachment(:avatar, required: true)
@@ -30,19 +34,14 @@ defmodule Upload.Changeset do
     terabyte: 1.0e12
   }
 
-  @spec put_attachment(changeset(), field(), Plug.Upload.t(), String.t()) :: changeset()
-  defp put_attachment(changeset, field, %Plug.Upload{} = upload, key) do
+  @spec put_attachment(changeset(), field(), Plug.Upload.t() | Upload.Stat.t(), String.t()) ::
+          changeset()
+  def put_attachment(changeset, field, %Plug.Upload{} = upload, key) do
     put_attachment(changeset, field, Upload.stat!(upload), key)
   end
 
-  @spec put_attachment(changeset(), field(), Upload.Stat.t(), String.t()) :: changeset()
-  defp put_attachment(changeset, field, %Upload.Stat{} = stat, key) do
+  def put_attachment(changeset, field, %Upload.Stat{} = stat, key) do
     put_assoc(changeset, field, Upload.Blob.change_blob(stat, key))
-  end
-
-  @spec put_attachment(changeset(), field(), Ecto.Changeset.t(), String.t()) :: changeset()
-  defp put_attachment(changeset, field, %Ecto.Changeset{} = blob_changeset, key) do
-    put_assoc(changeset, field, blob_changeset |> put_change(:key, key))
   end
 
   @spec put_attachment(changeset(), field(), Upload.Blob.t()) :: changeset()
@@ -50,6 +49,23 @@ defmodule Upload.Changeset do
     put_assoc(changeset, field, blob)
   end
 
+  @doc """
+  Adds an attachment to the changeset changes.
+
+  ## Options
+
+    * `:required` - Require the attachment.
+    * `:key_function` - A 1-arity function that is given the changeset and is
+      expected to return the path of the attachment in external storage without
+      the file type extension.
+
+  ## Example
+
+      iex> Upload.Changeset.cast_attachment(changeset, :avatar)
+
+      iex> Upload.Changeset.cast_attachment(changeset, :avatar, required: true, key_function: &key_function/1)
+
+  """
   @spec cast_attachment(changeset(), field(), cast_opts()) :: changeset()
   def cast_attachment(changeset, field, opts \\ []) do
     key =
@@ -96,7 +112,16 @@ defmodule Upload.Changeset do
     end)
   end
 
-  @spec validate_attachment_type(changeset, field, type_opts) :: changeset
+  @doc """
+  Require that the attachment is of a specific MIME type. This is determined by
+  looking at the file's contents and can be trusted.
+
+  ## Example
+
+      iex> validate_attachment_type(changeset, :avatar, allow: ["image/jpeg", "image/png"])
+
+  """
+  @spec validate_attachment_type(changeset(), field(), type_opts()) :: changeset()
   def validate_attachment_type(changeset, field, opts) do
     {message, opts} = Keyword.pop(opts, :message, "is not a supported file type")
 
@@ -109,6 +134,14 @@ defmodule Upload.Changeset do
     end)
   end
 
+  @doc """
+  Require that the attachment size is in a specific range.
+
+  ## Example
+
+      iex> validate_attachment_size(changeset, :avatar, smaller_than: {1, :megabyte})
+
+  """
   @spec validate_attachment_size(changeset, field, size_opts) :: changeset
   def validate_attachment_size(changeset, field, opts) do
     size = {number, unit} = Keyword.fetch!(opts, :smaller_than)

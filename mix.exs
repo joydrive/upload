@@ -50,8 +50,7 @@ defmodule Upload.Mixfile do
       {:cloak, "~> 1.1.4"},
       {:ecto_sql, "~> 3.8"},
       {:ecto, "~> 3.6"},
-      {:file_store,
-       git: "https://github.com/joydrive/file_store.git", branch: "jd-add-acl-support"},
+      {:file_store, git: "https://github.com/joydrive/file_store.git", sha: "2ce496f"},
       {:file_type, "~> 0.1"},
       {:image, "~> 0.48"},
       {:plug, "~> 1.13"},
@@ -61,7 +60,7 @@ defmodule Upload.Mixfile do
       # Test dependencies for this package
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:ex_doc, "~> 0.22", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:excoveralls, "~> 0.18", only: :test},
       {:mix_test_watch, "~> 1.0", only: :dev, runtime: false}
     ]

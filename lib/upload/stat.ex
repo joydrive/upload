@@ -1,5 +1,5 @@
 defmodule Upload.Stat do
-  @moduledoc false
+  @moduledoc "Metadata of a given file"
   defstruct [:path, :filename, :byte_size, :checksum, :metadata, :content_type]
 
   @chunk_size 2_048
