@@ -78,13 +78,22 @@ defmodule Upload.MultiTest do
 
       assert {:ok, %{person: person}} = upload_person(changeset)
 
-      {:ok, blob_variant} = Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
-      assert blob_variant.key == "uploads/users/avatars/123/variant/small.avif"
-      assert blob_variant.key in list_uploaded_keys()
+      {:ok, blob_variant1} =
+        Upload.create_variant(person.avatar, "small1", &small_transform_avif/3)
+
+      assert blob_variant1.key == "uploads/users/avatars/123/variant/small1.avif"
+      assert blob_variant1.key in list_uploaded_keys()
+
+      {:ok, blob_variant2} =
+        Upload.create_variant(person.avatar, "small2", &small_transform_avif/3)
+
+      assert blob_variant2.key == "uploads/users/avatars/123/variant/small2.avif"
+      assert blob_variant2.key in list_uploaded_keys()
 
       assert {:ok, _} = purge_person(person)
 
-      refute blob_variant.key in list_uploaded_keys()
+      refute blob_variant1.key in list_uploaded_keys()
+      refute blob_variant2.key in list_uploaded_keys()
     end
 
     test "does not fail when files are missing in the storage" do
