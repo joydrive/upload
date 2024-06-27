@@ -93,13 +93,14 @@ defmodule Upload do
     repo = Upload.Config.repo()
     variant = to_string(variant)
 
-    {:ok, multi_result} =
-      Ecto.Multi.new()
-      |> Upload.Multi.remove_existing_variant(original_blob, variant)
-      |> Upload.Multi.download_and_insert_variant(original_blob, variant, transform_fn)
-      |> repo.transaction()
-
-    Map.fetch!(multi_result, "download_and_insert_#{variant}")
+    Ecto.Multi.new()
+    |> Upload.Multi.remove_existing_variant(original_blob, variant)
+    |> Upload.Multi.download_and_insert_variant(original_blob, variant, transform_fn)
+    |> repo.transaction()
+    |> case do
+      {:ok, multi_result} -> Map.fetch!(multi_result, "download_and_insert_#{variant}")
+      {:error, error} -> {:error, error}
+    end
   end
 
   @doc """
@@ -119,20 +120,23 @@ defmodule Upload do
     repo = Upload.Config.repo()
     multi = Ecto.Multi.new()
 
-    {:ok, multi_result} =
-      variants
-      |> Enum.reduce(multi, fn variant, multi ->
-        multi
-        |> Upload.Multi.remove_existing_variant(original_blob, variant)
-        |> Upload.Multi.download_and_insert_variant(original_blob, variant, transform_fn)
-      end)
-      |> repo.transaction()
+    variants
+    |> Enum.reduce(multi, fn variant, multi ->
+      multi
+      |> Upload.Multi.remove_existing_variant(original_blob, variant)
+      |> Upload.Multi.download_and_insert_variant(original_blob, variant, transform_fn)
+    end)
+    |> repo.transaction()
+    |> case do
+      {:ok, multi_result} ->
+        {:ok,
+         multi_result
+         |> Map.values()
+         |> Enum.map(fn {:ok, value} -> value end)}
 
-    {:ok,
-     Enum.map(variants, fn variant ->
-       {:ok, result} = multi_result["download_and_insert_#{variant}"]
-       result
-     end)}
+      {:error, error} ->
+        {:error, error}
+    end
   end
 
   @doc """
