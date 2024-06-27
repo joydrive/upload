@@ -10,6 +10,7 @@ defmodule Upload.DataCase do
   using do
     quote do
       import Upload.DataCase
+      import Mock
     end
   end
 

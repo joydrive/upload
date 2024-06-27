@@ -78,6 +78,80 @@ defmodule UploadTest do
       assert small_avif_variant.key == "uploads/users/avatars/123/variant/small_avif.avif"
       assert small_avif_variant.key in list_uploaded_keys()
     end
+
+    test "returns an error when a temp file cannot be created" do
+      changeset = change_person(%{avatar: @upload})
+
+      assert {:ok, %{person: person}} = upload_person(changeset)
+      assert person.avatar
+
+      with_mock(Plug.Upload, random_file: fn _ -> {:error, :boom} end) do
+        {:error, "download_and_insert_small", %Upload.RandomFileError{reason: {:error, :boom}}} =
+          Upload.create_multiple_variants(
+            person.avatar,
+            [
+              "small"
+            ],
+            &transform_image/3
+          )
+      end
+    end
+
+    test "returns an error when the original file cannot be downloaded" do
+      changeset = change_person(%{avatar: @upload})
+
+      assert {:ok, %{person: person}} = upload_person(changeset)
+      assert person.avatar
+
+      with_mock(Upload.Storage, download: fn _key, _ -> {:error, :boom} end) do
+        {:error, "download_and_insert_small",
+         %Upload.DownloadError{reason: :boom, key: "uploads/users/avatars/123.jpg"}} =
+          Upload.create_multiple_variants(
+            person.avatar,
+            [
+              "small"
+            ],
+            &transform_image/3
+          )
+      end
+    end
+
+    test "returns an error when a temp file cannot be deleted" do
+      changeset = change_person(%{avatar: @upload})
+
+      assert {:ok, %{person: person}} = upload_person(changeset)
+      assert person.avatar
+
+      with_mock(File, [:passthrough], rm: fn _path -> {:error, :enoent} end) do
+        {:error, "download_and_insert_small",
+         %File.Error{reason: :enoent, action: "remove temporary file"}} =
+          Upload.create_multiple_variants(
+            person.avatar,
+            [
+              "small"
+            ],
+            fn _, _, _ -> :ok end
+          )
+      end
+    end
+
+    test "returns an error when attempting to insert a bad key caused by a variant name" do
+      changeset = change_person(%{avatar: @upload})
+
+      assert {:ok, %{person: person}} = upload_person(changeset)
+      assert person.avatar
+
+      {:error, "download_and_insert_.", changeset} =
+        Upload.create_multiple_variants(
+          person.avatar,
+          [
+            "."
+          ],
+          fn _, _, _ -> :ok end
+        )
+
+      assert errors_on(changeset)[:key] == ["has invalid format"]
+    end
   end
 
   describe "put_access_control_list/2" do

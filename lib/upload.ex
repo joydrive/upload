@@ -98,7 +98,7 @@ defmodule Upload do
     |> Upload.Multi.download_and_insert_variant(original_blob, variant, transform_fn)
     |> repo.transaction()
     |> case do
-      {:ok, multi_result} -> Map.fetch!(multi_result, "download_and_insert_#{variant}")
+      {:ok, multi_result} -> {:ok, Map.fetch!(multi_result, "download_and_insert_#{variant}")}
       {:error, error} -> {:error, error}
     end
   end
@@ -113,7 +113,7 @@ defmodule Upload do
       {:ok, [%Blob{...}, %Blob{...}]}
   """
   @spec create_multiple_variants(Blob.t(), [variant_id()], any()) ::
-          {:ok, [Blob.t()]} | {:error, any()}
+          {:ok, [Blob.t()]} | {:error, String.t(), any()}
   def create_multiple_variants(original_blob, variants, transform_fn)
       when is_function(transform_fn, 3) do
     variants = Enum.map(variants, &to_string/1)
@@ -129,13 +129,10 @@ defmodule Upload do
     |> repo.transaction()
     |> case do
       {:ok, multi_result} ->
-        {:ok,
-         multi_result
-         |> Map.values()
-         |> Enum.map(fn {:ok, value} -> value end)}
+        {:ok, Map.values(multi_result)}
 
-      {:error, error} ->
-        {:error, error}
+      {:error, stage, error, _} ->
+        {:error, stage, error}
     end
   end
 

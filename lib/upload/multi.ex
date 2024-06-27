@@ -76,13 +76,15 @@ defmodule Upload.Multi do
   def download_and_insert_variant(multi, original_blob, variant, transform_fn) do
     Multi.run(multi, "download_and_insert_#{variant}", fn repo, _ ->
       with {:ok, blob_path} <- create_random_file(),
-           :ok <- Upload.Storage.download(original_blob.key, blob_path),
+           :ok <- download_file(original_blob.key, blob_path),
            {:ok, variant_path} <- create_random_file(),
            :ok <- transform_fn.(blob_path, variant_path, variant),
            :ok <- cleanup(blob_path),
            {:ok, blob} <- insert_variant(repo, original_blob, variant, variant_path),
            :ok <- cleanup(variant_path) do
         {:ok, blob}
+      else
+        {:error, reason} -> {:error, reason}
       end
     end)
   end
@@ -105,7 +107,7 @@ defmodule Upload.Multi do
 
     changeset = Blob.changeset(%Blob{}, params)
 
-    {:ok, repo.insert(changeset)}
+    repo.insert(changeset)
   end
 
   defp variant_filename(original_blob, variant) do
@@ -123,8 +125,19 @@ defmodule Upload.Multi do
   end
 
   defp cleanup(path) do
-    with {:error, reason} <- File.rm(path) do
-      %File.Error{path: path, reason: reason, action: "remove temporary file"}
+    case File.rm(path) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        {:error, %File.Error{path: path, reason: reason, action: "remove temporary file"}}
+    end
+  end
+
+  defp download_file(key, path) do
+    case Upload.Storage.download(key, path) do
+      :ok -> :ok
+      {:error, reason} -> {:error, %Upload.DownloadError{reason: reason, key: key, path: path}}
     end
   end
 end

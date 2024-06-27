@@ -56,6 +56,7 @@ defmodule Upload.Mixfile do
       {:plug, "~> 1.13"},
       {:postgrex, ">= 0.0.0"},
       {:sweet_xml, ">= 0.0.0"},
+      {:mock, "~> 0.3"},
 
       # Test dependencies for this package
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
