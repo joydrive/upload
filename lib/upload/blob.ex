@@ -58,6 +58,7 @@ defmodule Upload.Blob do
     |> cast(attrs, @fields)
     |> generate_id()
     |> validate_required(@required_fields)
+    |> validate_format(:key, ~r/^[^.]*$/)
     |> add_extension_from_mime()
     |> foreign_key_constraint(:original_blob_id)
     |> validate_original_blob_id_is_not_variant()

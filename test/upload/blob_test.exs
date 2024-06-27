@@ -48,6 +48,14 @@ defmodule Upload.BlobTest do
            }
   end
 
+  test "does not allow keys with periods / existing extensions" do
+    changeset = Blob.changeset(%Blob{}, @attributes |> Map.put(:key, "foo.jpg"))
+    refute changeset.valid?
+
+    changeset = Blob.changeset(%Blob{}, @attributes |> Map.put(:key, "."))
+    refute changeset.valid?
+  end
+
   test "does not allow setting the original_blob_id to a variant blob" do
     blob = Repo.insert!(Blob.changeset(%Blob{}, @attributes))
 
