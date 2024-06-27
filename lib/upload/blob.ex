@@ -129,7 +129,7 @@ defmodule Upload.Blob do
         changeset
 
       original_blob_id ->
-        if repo.get_by(__MODULE__, id: original_blob_id).variant do
+        if repo.get(__MODULE__, original_blob_id).variant do
           add_error(
             changeset,
             :original_blob_id,
