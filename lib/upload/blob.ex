@@ -4,9 +4,10 @@ defmodule Upload.Blob do
 
   The checksum field is a MD5 hash of the blob.
   """
-
   use Ecto.Schema
+
   import Ecto.Changeset
+  import Ecto.Query
 
   alias Upload.Stat
 
@@ -130,14 +131,20 @@ defmodule Upload.Blob do
         changeset
 
       original_blob_id ->
-        if repo.get(__MODULE__, original_blob_id).variant do
-          add_error(
-            changeset,
-            :original_blob_id,
-            "Can not set original_blob_id to a variant blob."
-          )
-        else
-          changeset
+        __MODULE__
+        |> where([blob], blob.id == ^original_blob_id)
+        |> select([blob], blob.variant)
+        |> repo.one()
+        |> case do
+          nil ->
+            changeset
+
+          _variant ->
+            add_error(
+              changeset,
+              :original_blob_id,
+              "Can not set original_blob_id to a variant blob."
+            )
         end
     end
   end
