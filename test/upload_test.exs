@@ -1,85 +1,206 @@
 defmodule UploadTest do
-  use ExUnit.Case
+  use Upload.DataCase
 
-  doctest Upload,
-    except: [
-      get_url: 1,
-      get_signed_url: 2,
-      transfer: 1,
-      generate_key: 2,
-      cast: 2,
-      cast_path: 2
-    ]
+  alias Upload.Test.Person
+  alias Upload.Test.Repo
 
-  @fixture Path.expand("./fixtures/text.txt", __DIR__)
-  @plug %Plug.Upload{path: @fixture, filename: "text.txt"}
+  import Ecto.Multi
+  import Upload.Multi
 
-  test "get_url/1 and transfer/1" do
-    start_supervised(Upload.Adapters.Test)
+  @path "test/fixtures/image.jpg"
+  @upload %Plug.Upload{path: @path, filename: "image.jpg"}
 
-    assert {:ok, upload} = Upload.cast_path(@fixture)
-    assert {:ok, upload} = Upload.transfer(upload)
+  describe "create_variant/3" do
+    test "create a single variant of an upload" do
+      changeset = change_person(%{avatar: @upload})
 
-    assert Upload.get_url(upload) == upload.key
-    assert Upload.get_url(upload.key) == upload.key
+      assert {:ok, %{person: person}} = upload_person(changeset)
+      assert person.avatar
+
+      {:ok, blob_variant} = Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+
+      assert blob_variant.key == "uploads/users/avatars/123/variant/small.avif"
+      assert blob_variant.key in list_uploaded_keys()
+    end
+
+    test "replacing a single variant of an upload deletes the old one" do
+      changeset = change_person(%{avatar: @upload})
+
+      assert {:ok, %{person: person}} = upload_person(changeset)
+      assert person.avatar
+
+      {:ok, blob_variant1} =
+        Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+
+      assert blob_variant1.key in list_uploaded_keys()
+
+      {:ok, blob_variant2} =
+        Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+
+      assert blob_variant2.key in list_uploaded_keys()
+    end
   end
 
-  test "get_signed_url/2" do
-    start_supervised(Upload.Adapters.Test)
+  describe "variant_exists?/2" do
+    test "returns if a variant exists for a blob" do
+      changeset = change_person(%{avatar: @upload})
 
-    assert {:ok, upload} = Upload.cast_path(@fixture)
-    assert {:ok, upload} = Upload.transfer(upload)
+      assert {:ok, %{person: person}} = upload_person(changeset)
 
-    assert Upload.get_signed_url(upload) == {:ok, upload.key}
-    assert Upload.get_signed_url(upload.key) == {:ok, upload.key}
+      refute Upload.variant_exists?(person.avatar, "small")
+
+      {:ok, _} = Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+
+      assert Upload.variant_exists?(person.avatar, "small")
+    end
   end
 
-  test "generate_key/1" do
-    assert Upload.generate_key("phoenix.png") =~ ~r"^[a-z0-9]{32}\.png$"
+  describe "create_multiple_variants/3" do
+    test "create a single variant of an upload" do
+      changeset = change_person(%{avatar: @upload})
+
+      assert {:ok, %{person: person}} = upload_person(changeset)
+      assert person.avatar
+
+      {:ok, [small_variant, small_avif_variant]} =
+        Upload.create_multiple_variants(
+          person.avatar,
+          [
+            "small",
+            "small_avif"
+          ],
+          &transform_image/3
+        )
+
+      assert small_variant.key == "uploads/users/avatars/123/variant/small.jpg"
+      assert small_variant.key in list_uploaded_keys()
+
+      assert small_avif_variant.key == "uploads/users/avatars/123/variant/small_avif.avif"
+      assert small_avif_variant.key in list_uploaded_keys()
+    end
+
+    test "returns an error when a temp file cannot be created" do
+      changeset = change_person(%{avatar: @upload})
+
+      assert {:ok, %{person: person}} = upload_person(changeset)
+      assert person.avatar
+
+      with_mock(Plug.Upload, random_file: fn _ -> {:error, :boom} end) do
+        {:error, "download_and_insert_small", %Upload.RandomFileError{reason: {:error, :boom}}} =
+          Upload.create_multiple_variants(
+            person.avatar,
+            [
+              "small"
+            ],
+            &transform_image/3
+          )
+      end
+    end
+
+    test "returns an error when the original file cannot be downloaded" do
+      changeset = change_person(%{avatar: @upload})
+
+      assert {:ok, %{person: person}} = upload_person(changeset)
+      assert person.avatar
+
+      with_mock(Upload.Storage, download: fn _key, _ -> {:error, :boom} end) do
+        {:error, "download_and_insert_small",
+         %Upload.DownloadError{reason: :boom, key: "uploads/users/avatars/123.jpg"}} =
+          Upload.create_multiple_variants(
+            person.avatar,
+            [
+              "small"
+            ],
+            &transform_image/3
+          )
+      end
+    end
+
+    test "returns an error when a temp file cannot be deleted" do
+      changeset = change_person(%{avatar: @upload})
+
+      assert {:ok, %{person: person}} = upload_person(changeset)
+      assert person.avatar
+
+      with_mock(File, [:passthrough], rm: fn _path -> {:error, :enoent} end) do
+        {:error, "download_and_insert_small",
+         %File.Error{reason: :enoent, action: "remove temporary file"}} =
+          Upload.create_multiple_variants(
+            person.avatar,
+            [
+              "small"
+            ],
+            fn _, _, _ -> :ok end
+          )
+      end
+    end
+
+    test "returns an error when attempting to insert a bad key caused by a variant name" do
+      changeset = change_person(%{avatar: @upload})
+
+      assert {:ok, %{person: person}} = upload_person(changeset)
+      assert person.avatar
+
+      {:error, "download_and_insert_.", changeset} =
+        Upload.create_multiple_variants(
+          person.avatar,
+          [
+            "."
+          ],
+          fn _, _, _ -> :ok end
+        )
+
+      assert errors_on(changeset)[:key] == ["has invalid format"]
+    end
   end
 
-  test "generate_key/1 + opts" do
-    assert Upload.generate_key("phoenix.png", generate_key: false) == "phoenix.png"
+  describe "put_access_control_list/2" do
+    test "can set the ACL for an uploaded blob" do
+      changeset = change_person(%{avatar: @upload})
+
+      assert {:ok, %{person: person}} = upload_person(changeset)
+      assert person.avatar
+
+      :ok = Upload.put_access_control_list(person.avatar, "public_read")
+    end
   end
 
-  test "generate_key/2" do
-    assert Upload.generate_key("phoenix.png", prefix: ["logos"]) =~
-             ~r"^logos/[a-z0-9]{32}\.png$"
+  defp upload_person(changeset) do
+    new()
+    |> insert(:person, changeset)
+    |> upload(:avatar, fn ctx -> ctx.person.avatar end)
+    |> Repo.transaction()
   end
 
-  test "generate_key/2 with multiple prefix elements" do
-    assert Upload.generate_key("phoenix.png", prefix: ["logos", "123"]) =~
-             ~r"^logos/123/[a-z0-9]{32}\.png$"
+  defp change_person(attrs, opts \\ []) do
+    key_function = Keyword.get(opts, :key_function, &key_function/1)
+
+    %Person{}
+    |> Person.changeset(attrs)
+    |> Upload.Changeset.cast_attachment(:avatar, key_function: key_function)
   end
 
-  test "cast/1 with a %Plug.Upload{}" do
-    assert {:ok, upload} = Upload.cast(@plug)
-    assert upload.path == @plug.path
-    assert upload.filename == @plug.filename
-    assert upload.key =~ ~r"^[a-z0-9]{32}\.txt$"
-    assert upload.status == :pending
+  defp key_function(_changeset) do
+    "uploads/users/avatars/123"
   end
 
-  test "cast/1 with an %Upload{}" do
-    assert {:ok, upload} = Upload.cast_path(@fixture)
-    assert {:ok, ^upload} = Upload.cast(upload)
+  defp transform_image(source, dest, "small") do
+    with {:ok, image} <- Image.open(source),
+         {:ok, image} <- Image.thumbnail(image, "768x480", crop: :center),
+         {:ok, _} <- Image.write(image, dest <> ".jpg"),
+         :ok <- File.cp(dest <> ".jpg", dest) do
+      File.rm(dest <> ".jpg")
+    end
   end
 
-  test "cast/1 with something else" do
-    assert Upload.cast(100) == :error
-    assert Upload.cast(nil) == :error
+  defp transform_image(source, dest, "small_avif") do
+    with {:ok, image} <- Image.open(source),
+         {:ok, image} <- Image.thumbnail(image, "768x480", crop: :center),
+         {:ok, _} <- Image.write(image, dest <> ".avif"),
+         :ok <- File.cp(dest <> ".avif", dest) do
+      File.rm(dest <> ".avif")
+    end
   end
 
-  test "cast_path/1 with a path" do
-    assert {:ok, upload} = Upload.cast_path(@fixture)
-    assert upload.path == @plug.path
-    assert upload.filename == @plug.filename
-    assert upload.key =~ ~r"^[a-z0-9]{32}\.txt$"
-    assert upload.status == :pending
-  end
-
-  test "cast_path/1 with something else" do
-    assert :error = Upload.cast_path(100)
-    assert :error = Upload.cast_path(nil)
-  end
+  defp small_transform_avif(source, dest, _), do: transform_image(source, dest, "small_avif")
 end

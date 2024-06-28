@@ -3,207 +3,168 @@ defmodule Upload do
   An opinionated file uploader.
   """
 
-  @enforce_keys [:key, :path, :filename]
-  defstruct [:key, :path, :filename, status: :pending]
+  @type variant_id :: String.t() | atom()
 
-  @type t :: %Upload{
-          key: String.t(),
-          filename: String.t(),
-          path: String.t()
-        }
+  alias Upload.Blob
+  alias Upload.Stat
 
-  @type transferred :: %Upload{
-          key: String.t(),
-          filename: String.t(),
-          path: String.t(),
-          status: :transferred
-        }
+  import Ecto.Query
 
-  @type uploadable :: Plug.Upload.t() | Upload.t()
-  @type uploadable_path :: String.t() | Upload.t()
-
-  @doc """
-  Get the adapter from config.
-  """
-  def adapter do
-    Upload.Config.get(__MODULE__, :adapter, Upload.Adapters.Local)
+  @spec stat(String.t() | Plug.Upload.t()) :: {:ok, Stat.t()} | {:error, any()}
+  def stat(path) when is_binary(path) do
+    Stat.stat(path)
   end
 
-  @doc """
-  Get the URL for a given key. It will behave differently based
-  on the adapter you're using.
+  def stat(%Plug.Upload{path: path} = upload) do
+    with {:ok, stat} <- Stat.stat(path) do
+      stat =
+        stat
+        |> Stat.put(:filename, upload.filename)
+        |> Stat.put(:content_type, upload.content_type)
 
-  ### Local
-
-      iex> Upload.get_url("123456.png")
-      "/uploads/123456.png"
-
-  ### S3
-
-      iex> Upload.get_url("123456.png")
-      "https://my_bucket_name.s3.amazonaws.com/123456.png"
-
-  ### Fake / Test
-
-      iex> Upload.get_url("123456.png")
-      "123456.png"
-
-  """
-  @spec get_url(Upload.t() | String.t()) :: String.t()
-  def get_url(%__MODULE__{key: key}), do: get_url(key)
-  def get_url(key) when is_binary(key), do: adapter().get_url(key)
-
-  @doc """
-  Get the URL for a given key. It will behave differently based
-  on the adapter you're using.
-
-  ### Examples
-
-      iex> Upload.get_signed_url("123456.png")
-      {:ok, "http://yoururl.com/123456.png?X-Amz-Expires=3600..."}
-
-      iex> Upload.get_signed_url("123456.png", expires_in: 4200)
-      {:ok, "http://yoururl.com/123456.png?X-Amz-Expires=4200..."}
-
-  """
-  @spec get_signed_url(Upload.t() | String.t(), Keyword.t()) ::
-          {:ok, String.t()} | {:error, String.t()}
-  def get_signed_url(upload, opts \\ [])
-  def get_signed_url(%__MODULE__{key: key}, opts), do: get_signed_url(key, opts)
-  def get_signed_url(key, opts) when is_binary(key), do: adapter().get_signed_url(key, opts)
-
-  @doc """
-  Transfer the file to where it will be stored.
-  """
-  @spec transfer(Upload.t()) :: {:ok, Upload.transferred()} | {:error, String.t()}
-  def transfer(%__MODULE__{} = upload), do: adapter().transfer(upload)
-
-  @doc """
-  Deletes the file where it is stored.
-  """
-  @spec delete(String.t()) :: :ok | {:error, String.t()}
-  def delete(key), do: adapter().delete(key)
-
-  @doc """
-  Converts a `Plug.Upload` to an `Upload`.
-
-  ## Examples
-
-      iex> Upload.cast(%Plug.Upload{path: "/path/to/foo.png", filename: "foo.png"})
-      {:ok, %Upload{path: "/path/to/foo.png", filename: "foo.png", key: "123456.png"}}
-
-      iex> Upload.cast(100)
-      :error
-
-  """
-  @spec cast(uploadable, list) :: {:ok, Upload.t()} | :error
-  def cast(uploadable, opts \\ [])
-  def cast(%Upload{} = upload, _opts), do: {:ok, upload}
-
-  def cast(%Plug.Upload{filename: filename, path: path}, opts) do
-    do_cast(filename, path, opts)
+      {:ok, stat}
+    end
   end
 
-  def cast(_not_uploadable, _opts) do
-    :error
-  end
+  def stat!(path) do
+    case stat(path) do
+      {:ok, stat} ->
+        stat
 
-  @doc """
-  Cast a file path to an `Upload`.
+      {:error, reason} when is_atom(reason) ->
+        raise File.Error, path: path, reason: reason, action: "read file stats"
 
-  *Warning:* Do not use `cast_path` with unsanitized user input.
-
-  ## Examples
-
-      iex> Upload.cast_path("/path/to/foo.png")
-      {:ok, %Upload{path: "/path/to/foo.png", filename: "foo.png", key: "123456.png"}}
-
-      iex> Upload.cast_path(100)
-      :error
-
-  """
-  @spec cast_path(uploadable_path, list) :: {:ok, Upload.t()} | :error
-  def cast_path(path, opts \\ [])
-  def cast_path(%Upload{} = upload, _opts), do: {:ok, upload}
-
-  def cast_path(path, opts) when is_binary(path) do
-    path
-    |> Path.basename()
-    |> do_cast(path, opts)
-  end
-
-  def cast_path(_, _opts) do
-    :error
-  end
-
-  defp do_cast(filename, path, opts) do
-    {:ok,
-     %__MODULE__{
-       key: generate_key(filename, opts),
-       path: path,
-       filename: filename,
-       status: :pending
-     }}
-  end
-
-  @doc """
-  Converts a filename to a unique key.
-
-  ## Examples
-
-      iex> Upload.generate_key("phoenix.png")
-      "b9452178-9a54-5e99-8e64-a059b01b88cf.png"
-
-      iex> Upload.generate_key("phoenix.png", generate_key: false)
-      "phoenix.png"
-
-      iex> Upload.generate_key("phoenix.png", prefix: ["logos"])
-      "logos/b9452178-9a54-5e99-8e64-a059b01b88cf.png"
-
-  """
-  @spec generate_key(String.t(), [{:prefix, list}]) :: String.t()
-  def generate_key(filename, opts \\ []) when is_binary(filename) do
-    if Keyword.get(opts, :generate_key, true) do
-      uuid = UUID.uuid4(:hex)
-      ext = get_extension(filename)
-
-      opts
-      |> Keyword.get(:prefix, [])
-      |> Enum.join("/")
-      |> Path.join(uuid <> ext)
-    else
-      opts
-      |> Keyword.get(:prefix, [])
-      |> Enum.join("/")
-      |> Path.join(filename)
+      {:error, exception} when is_struct(exception) ->
+        raise exception
     end
   end
 
   @doc """
-  Gets the extension from a filename.
+  Checks if a variant exists for a given `Upload.Blob` and the variant identifier.
 
-  ## Examples
+  ## Example
 
-      iex> Upload.get_extension("foo.png")
-      ".png"
-
-      iex> Upload.get_extension("foo.PNG")
-      ".png"
-
-      iex> Upload.get_extension("foo")
-      ""
-
-      iex> {:ok, upload} = Upload.cast_path("/path/to/foo.png")
-      ...> Upload.get_extension(upload)
-      ".png"
+      iex> Upload.variant_exists?(person.avatar, :small)
+      iex> true
 
   """
-  @spec get_extension(String.t() | Upload.t()) :: String.t()
-  def get_extension(%Upload{filename: filename}) do
-    get_extension(filename)
+  @spec variant_exists?(Blob.t(), variant_id()) :: boolean()
+  def variant_exists?(%Blob{id: blob_id}, variant) do
+    repo = Upload.Config.repo()
+
+    Blob
+    |> where([blob], blob.original_blob_id == ^blob_id and blob.variant == ^to_string(variant))
+    |> repo.exists?()
   end
 
-  def get_extension(filename) when is_binary(filename) do
-    filename |> Path.extname() |> String.downcase()
+  @doc """
+  Returns the variant for a given `Upload.Blob` and the variant identifier or `nil` if it
+  does not exist.
+
+  ## Example
+
+      iex> Upload.get_variant(person.avatar, :small)
+      %Blob{}
+
+  """
+  @spec get_variant(Blob.t(), variant_id()) :: nil | Blob.t()
+  def get_variant(%Blob{id: blob_id}, variant) do
+    repo = Upload.Config.repo()
+
+    Blob
+    |> where([blob], blob.original_blob_id == ^blob_id and blob.variant == ^to_string(variant))
+    |> repo.one()
+  end
+
+  @doc """
+  Creates and uploads a single variant of a blob.
+
+  Calling this multiple times is not the optimal for creating multiple variants
+  of a blob at once since this function would download the original blob once
+  per variant. See `create_multiple_variants/3`.
+
+  ## Example
+
+      iex> create_variant(original_blob, :small, &transform_fn/3)
+      {:ok, %Blob{}}
+  """
+  @spec create_variant(Blob.t(), String.t(), any()) :: {:ok, Blob.t()} | {:error, any()}
+  def create_variant(original_blob, variant, transform_fn) when is_function(transform_fn, 3) do
+    repo = Upload.Config.repo()
+    variant = to_string(variant)
+
+    Ecto.Multi.new()
+    |> Upload.Multi.remove_existing_variant(original_blob, variant)
+    |> Upload.Multi.download_and_insert_variant(original_blob, variant, transform_fn)
+    |> repo.transaction()
+    |> case do
+      {:ok, multi_result} -> {:ok, Map.fetch!(multi_result, "download_and_insert_#{variant}")}
+      {:error, error} -> {:error, error}
+    end
+  end
+
+  @doc """
+  Creates multiple versions of a blob after downloading the source blob once.
+  Useful for creating multiple versions of a photo for example.
+
+  ## Example
+
+      iex> create_multiple_variants(blob, [:small, :large], &transform_fn/3)
+      {:ok, [%Blob{...}, %Blob{...}]}
+  """
+  @spec create_multiple_variants(Blob.t(), [variant_id()], any()) ::
+          {:ok, [Blob.t()]} | {:error, String.t(), any()}
+  def create_multiple_variants(original_blob, variants, transform_fn)
+      when is_function(transform_fn, 3) do
+    variants = Enum.map(variants, &to_string/1)
+    repo = Upload.Config.repo()
+    multi = Ecto.Multi.new()
+
+    variants
+    |> Enum.reduce(multi, fn variant, multi ->
+      multi
+      |> Upload.Multi.remove_existing_variant(original_blob, variant)
+      |> Upload.Multi.download_and_insert_variant(original_blob, variant, transform_fn)
+    end)
+    |> repo.transaction()
+    |> case do
+      {:ok, multi_result} ->
+        {:ok, Map.values(multi_result)}
+
+      {:error, stage, error, _} ->
+        {:error, stage, error}
+    end
+  end
+
+  @doc """
+  Set the visiblity of a `Blob` using the struct or it's key.
+
+  > #### Note {: .warning}
+  >
+  > This only applies when Upload is configured to use S3.
+
+  Supported canned access control lists for Amazon S3 are:
+
+  | ACL                          | Permissions Added to ACL                                                        |
+  |------------------------------|---------------------------------------------------------------------------------|
+  | private                      | Owner gets `FULL_CONTROL`. No one else has access rights (default).             |
+  | public_read                  | Owner gets `FULL_CONTROL`. The `AllUsers` group gets READ access.               |
+  | public_read_write            | Owner gets `FULL_CONTROL`. The `AllUsers` group gets `READ` and `WRITE` access. Granting this on a bucket is generally not recommended. |
+  | authenticated_read           | Owner gets `FULL_CONTROL`. The `AuthenticatedUsers` group gets `READ` access.   |
+  | bucket_owner_read            | Object owner gets `FULL_CONTROL`. Bucket owner gets `READ` access.              |
+  | bucket_owner_full_control    | Both the object owner and the bucket owner get `FULL_CONTROL` over the object.  |
+
+  ## Example
+
+      iex> Upload.put_access_control_list(person.avatar, :public_read)
+      :ok
+  """
+  @spec put_access_control_list(Blob.t() | Blob.key(), String.t()) :: :ok | {:error, term()}
+  def put_access_control_list(%Blob{key: key} = _blob, canned_acl) do
+    put_access_control_list(key, canned_acl)
+  end
+
+  def put_access_control_list(key, canned_acl) do
+    Upload.Storage.put_access_control_list(key, [{:acl, canned_acl}])
   end
 end
