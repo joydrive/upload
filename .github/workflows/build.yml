@@ -1,5 +1,7 @@
 name: Build
+
 on: [push]
+
 jobs:
   build:
     name: Elixir ${{matrix.elixir}} - OTP ${{matrix.otp}}
@@ -12,15 +14,28 @@ jobs:
     strategy:
       matrix:
         elixir:
-          - "1.12.0"
-          - "1.13.0"
+          - "1.16.1"
         otp:
-          - "24.3.4"
+          - "26.2.2"
 
     services:
       fake-s3:
         image: lphoward/fake-s3
         ports: ["4569:4569"]
+
+      postgres:
+        image: postgres:16
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: upload_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout
@@ -41,6 +56,9 @@ jobs:
       - name: Check formatting
         run: mix format --check-formatted
 
+      - name: Credo
+        run: mix credo
+
       - name: Test
         run: mix test
 
@@ -51,4 +69,4 @@ jobs:
           key: plts-${{ matrix.elixir }}
 
       - name: Dialyzer
-        run: mix dialyzer
+        run: MIX_ENV=dev mix dialyzer
