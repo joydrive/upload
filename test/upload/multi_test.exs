@@ -7,6 +7,7 @@ defmodule Upload.MultiTest do
 
   import Ecto.Multi
   import Upload.Multi
+  import Mock
 
   @path "test/fixtures/image.jpg"
   @upload %Plug.Upload{path: @path, filename: "image.jpg"}
@@ -20,6 +21,57 @@ defmodule Upload.MultiTest do
 
     assert person.avatar
     assert person.avatar.key in list_uploaded_keys()
+  end
+
+  test "overwrites deletes old blobs" do
+    person =
+      %Person{}
+      |> Person.changeset(%{avatar: @upload})
+      |> Upload.Changeset.cast_attachment(:avatar,
+        key_function: fn _ -> "uploads/users/avatars/123" end
+      )
+      |> Repo.insert!()
+
+    assert person.avatar_id
+    assert person.avatar.key == "uploads/users/avatars/123.jpg"
+
+    with_mock(Upload.Multi, [:passthrough], purge: fn multi, _, _ -> multi end) do
+      person =
+        person
+        |> Person.changeset(%{avatar: @upload})
+        |> Upload.Changeset.cast_attachment(:avatar,
+          key_function: fn _ -> "uploads/users/avatars/123" end
+        )
+        |> Repo.update!()
+
+      assert person.avatar
+      assert person.avatar.key == "uploads/users/avatars/123.jpg"
+
+      assert_called(Upload.Multi.purge(:_, :_, :_))
+    end
+  end
+
+  test "cast_attachment/2 casting nil deletes the associated record and the remote file" do
+    {:ok, person} =
+      %Person{}
+      |> Person.changeset(%{avatar: @upload})
+      |> Upload.Changeset.cast_attachment(:avatar,
+        key_function: fn _ -> "uploads/users/avatars/123" end
+      )
+      |> Repo.insert()
+
+    key = person.avatar.key
+
+    assert key in list_uploaded_keys()
+
+    person =
+      person
+      |> Person.changeset(%{avatar: nil})
+      |> Upload.Changeset.cast_attachment(:avatar)
+      |> Repo.update!()
+
+    assert person.avatar == nil
+    refute key in list_uploaded_keys()
   end
 
   test "create a variant of an upload" do
@@ -124,8 +176,8 @@ defmodule Upload.MultiTest do
     |> Repo.transaction()
   end
 
-  defp change_person(attrs) do
-    %Person{}
+  defp change_person(person \\ %Person{}, attrs) do
+    person
     |> Person.changeset(attrs)
     |> Upload.Changeset.cast_attachment(:avatar, key_function: &key_function/1)
   end

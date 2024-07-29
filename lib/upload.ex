@@ -57,6 +57,24 @@ defmodule Upload do
     |> repo.exists?()
   end
 
+  @spec remove_by_key(String.t()) :: :ok | {:error, any()}
+  def remove_by_key(key) do
+    repo = Upload.Config.repo()
+
+    case repo.get_by(Upload.Blob, key: key) do
+      nil ->
+        :ok
+
+      blob ->
+        case Ecto.Multi.new()
+             |> Upload.Multi.purge(:remove_existing_blob, blob)
+             |> repo.transaction() do
+          {:ok, _} -> :ok
+          error -> error
+        end
+    end
+  end
+
   @doc """
   Returns the variant for a given `Upload.Blob` and the variant identifier or `nil` if it
   does not exist.

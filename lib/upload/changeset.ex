@@ -13,7 +13,6 @@ defmodule Upload.Changeset do
   |> validate_attachment_type(:avatar, allow: ["image/png"])
   ```
   """
-
   import Ecto.Changeset
 
   @type changeset :: Ecto.Changeset.t()
@@ -75,9 +74,16 @@ defmodule Upload.Changeset do
         _ -> raise ArgumentError, "key_function must be a function of arity 1."
       end
 
+    changeset =
+      update_in(changeset.data, fn data ->
+        Upload.Config.repo().preload(data, field)
+      end)
+
     case Map.fetch(changeset.params, to_string(field)) do
       {:ok, %Plug.Upload{} = upload} ->
-        put_attachment(changeset, field, upload, key)
+        changeset
+        |> remove_existing_field(field)
+        |> put_attachment(field, upload, key)
 
       {:ok, nil} ->
         if Keyword.get(opts, :required, false) do
@@ -85,8 +91,9 @@ defmodule Upload.Changeset do
           meta = [validation: :required]
           add_error(changeset, field, message, meta)
         else
-          # delete here?
-          put_assoc(changeset, field, nil)
+          changeset
+          |> remove_existing_field(field)
+          |> put_assoc(field, nil)
         end
 
       {:ok, _other} ->
@@ -96,6 +103,40 @@ defmodule Upload.Changeset do
 
       :error ->
         changeset
+    end
+  end
+
+  defp remove_existing_field(changeset, field) do
+    Ecto.Changeset.prepare_changes(changeset, fn changeset ->
+      # record = repo.preload(changeset.data, field)
+
+      case get_in(get_field(changeset, field), [Access.key(:key)]) do
+        nil ->
+          delete_existing_association_if_any(changeset, field)
+
+        key ->
+          Upload.remove_by_key(key)
+      end
+
+      changeset
+    end)
+  end
+
+  defp delete_existing_association_if_any(changeset, field) do
+    repo = Upload.Config.repo()
+
+    case Map.get(changeset.data, field) do
+      %Ecto.Association.NotLoaded{} ->
+        raise "Calling cast_attachment requires the field to be preloaded."
+
+      nil ->
+        :ok
+
+      association ->
+        {:ok, _} =
+          Ecto.Multi.new()
+          |> Upload.Multi.purge(:remove_existing_blob, association)
+          |> repo.transaction()
     end
   end
 
