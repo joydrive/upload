@@ -25,7 +25,10 @@ defmodule Upload.Migrations do
       add(:checksum, :string, null: false)
 
       add(:variant, :string)
-      add(:original_blob_id, references(:blobs, type: :binary_id), type: :binary_id)
+
+      add(:original_blob_id, references(:blobs, type: :binary_id, on_delete: :delete_all),
+        type: :binary_id
+      )
 
       timestamps(updated_at: false)
     end

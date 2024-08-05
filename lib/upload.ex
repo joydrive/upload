@@ -57,8 +57,20 @@ defmodule Upload do
     |> repo.exists?()
   end
 
-  @spec remove_by_key(String.t()) :: :ok | {:error, any()}
-  def remove_by_key(key) do
+  @spec delete(Blob.t()) :: :ok | {:error, any()}
+  def delete(blob) do
+    repo = Upload.Config.repo()
+
+    case Ecto.Multi.new()
+         |> Upload.Multi.delete_blob(:remove_existing_blob, blob)
+         |> repo.transaction() do
+      {:ok, _} -> :ok
+      error -> error
+    end
+  end
+
+  @spec delete_by_key(String.t()) :: :ok | {:error, any()}
+  def delete_by_key(key) do
     repo = Upload.Config.repo()
 
     case repo.get_by(Upload.Blob, key: key) do
@@ -66,12 +78,7 @@ defmodule Upload do
         :ok
 
       blob ->
-        case Ecto.Multi.new()
-             |> Upload.Multi.purge(:remove_existing_blob, blob)
-             |> repo.transaction() do
-          {:ok, _} -> :ok
-          error -> error
-        end
+        delete(blob)
     end
   end
 
@@ -106,17 +113,34 @@ defmodule Upload do
       iex> create_variant(original_blob, :small, &transform_fn/3)
       {:ok, %Blob{}}
   """
-  @spec create_variant(Blob.t(), String.t(), any()) :: {:ok, Blob.t()} | {:error, any()}
-  def create_variant(original_blob, variant, transform_fn) when is_function(transform_fn, 3) do
+  @spec create_variant(Blob.t(), String.t(), any(), keyword()) ::
+          {:ok, Blob.t()} | {:error, any()}
+  def create_variant(original_blob, variant, transform_fn, opts \\ [])
+      when is_function(transform_fn, 3) do
     repo = Upload.Config.repo()
     variant = to_string(variant)
+    formats = Keyword.get(opts, :formats, [:"image/jpeg"])
 
-    Ecto.Multi.new()
-    |> Upload.Multi.remove_existing_variant(original_blob, variant)
-    |> Upload.Multi.download_and_insert_variant(original_blob, variant, transform_fn)
+    multi =
+      Ecto.Multi.new()
+      |> Upload.Multi.remove_existing_variant(original_blob, variant)
+
+    multi =
+      formats
+      |> Enum.reduce(multi, fn format, multi ->
+        Upload.Multi.download_and_insert_variant(
+          multi,
+          original_blob,
+          variant,
+          transform_fn,
+          format
+        )
+      end)
+
+    multi
     |> repo.transaction()
     |> case do
-      {:ok, multi_result} -> {:ok, Map.fetch!(multi_result, "download_and_insert_#{variant}")}
+      {:ok, multi_result} -> {:ok, Map.values(multi_result)}
       {:error, error} -> {:error, error}
     end
   end
@@ -127,14 +151,16 @@ defmodule Upload do
 
   ## Example
 
-      iex> create_multiple_variants(blob, [:small, :large], &transform_fn/3)
+      iex> create_multiple_variants(blob, [:small, :large], &transform_fn/2)
       {:ok, [%Blob{...}, %Blob{...}]}
   """
   @spec create_multiple_variants(Blob.t(), [variant_id()], any()) ::
           {:ok, [Blob.t()]} | {:error, String.t(), any()}
-  def create_multiple_variants(original_blob, variants, transform_fn)
+  def create_multiple_variants(original_blob, variants, transform_fn, opts \\ [])
       when is_function(transform_fn, 3) do
     variants = Enum.map(variants, &to_string/1)
+    formats = Keyword.get(opts, :formats, [:"image/jpeg"])
+
     repo = Upload.Config.repo()
     multi = Ecto.Multi.new()
 
@@ -142,7 +168,17 @@ defmodule Upload do
     |> Enum.reduce(multi, fn variant, multi ->
       multi
       |> Upload.Multi.remove_existing_variant(original_blob, variant)
-      |> Upload.Multi.download_and_insert_variant(original_blob, variant, transform_fn)
+
+      formats
+      |> Enum.reduce(multi, fn format, multi ->
+        Upload.Multi.download_and_insert_variant(
+          multi,
+          original_blob,
+          variant,
+          transform_fn,
+          format
+        )
+      end)
     end)
     |> repo.transaction()
     |> case do
