@@ -64,8 +64,9 @@ defmodule Upload.Blob do
     |> foreign_key_constraint(:original_blob_id)
     |> validate_original_blob_id_is_not_variant()
     |> check_constraint(:variant, name: :variant_and_original_blob_id_are_only_nullable_together)
-    |> maybe_upload()
-    |> maybe_delete()
+
+    # |> maybe_upload()
+    # |> maybe_delete()
   end
 
   defp generate_id(changeset) do
@@ -84,7 +85,11 @@ defmodule Upload.Blob do
         key <> "." <> extension
       end)
     else
-      add_error(changeset, :key, "Could not set extension from MIME type: '#{mime}'")
+      add_error(
+        changeset,
+        :key,
+        "Could not set the extension from the given MIME type: '#{mime}'"
+      )
     end
   end
 
@@ -98,30 +103,30 @@ defmodule Upload.Blob do
     )
   end
 
-  defp maybe_upload(changeset) do
-    prepare_changes(changeset, fn changeset ->
-      if changeset.action == :insert do
-        %{path: path, key: key} = changeset.changes
+  # defp maybe_upload(changeset) do
+  #   prepare_changes(changeset, fn changeset ->
+  #     if changeset.action == :insert do
+  #       %{path: path, key: key} = changeset.changes
 
-        :ok = Upload.Storage.upload(path, key)
-      end
+  #       :ok = Upload.Storage.upload(path, key)
+  #     end
 
-      changeset
-    end)
-  end
+  #     changeset
+  #   end)
+  # end
 
-  defp maybe_delete(changeset) do
-    prepare_changes(changeset, fn changeset ->
-      if changeset.action == :delete do
-        {:ok, _} =
-          Ecto.Multi.new()
-          |> Upload.Multi.purge(:blob, changeset.data)
-          |> Upload.Config.repo().transaction()
-      end
+  # defp maybe_delete(changeset) do
+  #   prepare_changes(changeset, fn changeset ->
+  #     if changeset.action == :delete do
+  #       {:ok, _} =
+  #         Ecto.Multi.new()
+  #         |> Upload.Multi.purge(:blob, changeset.data)
+  #         |> Upload.Config.repo().transaction()
+  #     end
 
-      changeset
-    end)
-  end
+  #     changeset
+  #   end)
+  # end
 
   defp validate_original_blob_id_is_not_variant(changeset) do
     repo = Upload.Config.repo()

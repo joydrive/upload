@@ -20,7 +20,7 @@ defmodule Upload.ChangesetTest do
     @required_custom {"boom", validation: :required}
 
     test "accepts a Plug.Upload" do
-      changeset = change_person(%{avatar: @upload})
+      changeset = update_person(%{avatar: @upload})
 
       assert changeset.valid?
       assert changeset.changes.avatar
@@ -30,39 +30,45 @@ defmodule Upload.ChangesetTest do
       assert changeset.changes.avatar.changes.filename
     end
 
+    test "accepts a file path" do
+      changeset = update_person(%{avatar: "test/fixtures/image.jpg"})
+
+      assert changeset.valid?
+    end
+
     test "rejects invalid values" do
-      changeset = change_person(%{avatar: @path})
+      changeset = update_person(%{avatar: "foo"})
       refute changeset.valid?
       assert changeset.errors[:avatar] == @invalid
     end
 
     test "rejects invalid values with a custom message" do
-      changeset = change_person(%{avatar: 42}, invalid_message: "boom")
+      changeset = update_person(%{avatar: 42}, invalid_message: "boom")
       refute changeset.valid?
       assert changeset.errors[:avatar] == @invalid_custom
     end
 
     test "accepts nil" do
-      changeset = change_person(%{avatar: nil})
+      changeset = update_person(%{avatar: nil})
+
       assert changeset.valid?
-      assert changeset.changes.avatar == nil
     end
 
     test "rejects `nil` when required" do
-      changeset = change_person(%{avatar: nil}, required: true)
+      changeset = update_person(%{avatar: nil}, required: true)
       refute changeset.valid?
       assert changeset.errors[:avatar] == @required
     end
 
     test "rejects `nil` when a custom message when required" do
-      changeset = change_person(%{avatar: nil}, required: true, required_message: "boom")
+      changeset = update_person(%{avatar: nil}, required: true, required_message: "boom")
       refute changeset.valid?
       assert changeset.errors[:avatar] == @required_custom
     end
 
     test "raises when the key_function option is not a function" do
       assert_raise(ArgumentError, fn ->
-        change_person(%{avatar: nil}, key_function: :foo)
+        update_person(%{avatar: nil}, key_function: :foo)
       end)
     end
   end
@@ -71,7 +77,7 @@ defmodule Upload.ChangesetTest do
     test "does nothing when there is no change" do
       changeset =
         %{avatar: @upload}
-        |> change_person()
+        |> update_person()
         |> validate_attachment(:avatar, :variant, fn _ -> :ok end)
 
       assert changeset.valid?
@@ -88,14 +94,14 @@ defmodule Upload.ChangesetTest do
 
       changeset =
         %{avatar: upload}
-        |> change_person(required: true)
+        |> update_person(required: true)
         |> validate_attachment_type(:avatar, allow: ["image/jpeg"])
 
       assert changeset.valid?
 
       changeset =
         %{avatar: upload}
-        |> change_person(required: true)
+        |> update_person(required: true)
         |> validate_attachment_type(:avatar, allow: ["image/png"])
 
       refute changeset.valid?
@@ -109,7 +115,7 @@ defmodule Upload.ChangesetTest do
     test "fails the image is larger than the specified maximum size" do
       changeset =
         %{avatar: @upload}
-        |> change_person(required: true)
+        |> update_person(required: true)
         |> validate_attachment_size(:avatar, smaller_than: {1, :megabyte})
 
       refute changeset.valid?
@@ -119,14 +125,14 @@ defmodule Upload.ChangesetTest do
     test "succeeds when the image is smaller than the specified maximum size" do
       changeset =
         %{avatar: @upload}
-        |> change_person(required: true)
+        |> update_person(required: true)
         |> validate_attachment_size(:avatar, smaller_than: {2, :megabyte})
 
       assert changeset.valid?
     end
   end
 
-  defp change_person(attrs, opts \\ []) do
+  defp update_person(attrs, opts \\ []) do
     %Person{}
     |> Person.changeset(attrs)
     |> cast_attachment(:avatar, opts ++ [key_function: &key_function/1])

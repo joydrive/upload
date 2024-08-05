@@ -13,7 +13,6 @@ defmodule Upload.Changeset do
   |> validate_attachment_type(:avatar, allow: ["image/png"])
   ```
   """
-
   import Ecto.Changeset
 
   @type changeset :: Ecto.Changeset.t()
@@ -75,9 +74,29 @@ defmodule Upload.Changeset do
         _ -> raise ArgumentError, "key_function must be a function of arity 1."
       end
 
+    changeset =
+      update_in(changeset.data, fn data ->
+        Upload.Config.repo().preload(data, field)
+      end)
+
     case Map.fetch(changeset.params, to_string(field)) do
       {:ok, %Plug.Upload{} = upload} ->
-        put_attachment(changeset, field, upload, key)
+        changeset
+        # |> remove_existing_field(field)
+        |> put_attachment(field, upload, key)
+
+      {:ok, path} when is_binary(path) ->
+        case Upload.stat(path) do
+          {:error, _error} ->
+            message = Keyword.get(opts, :invalid_message, "is invalid")
+            meta = [validation: :assoc, type: :map]
+            add_error(changeset, field, message, meta)
+
+          {:ok, stat} ->
+            changeset
+            # |> remove_existing_field(field)
+            |> put_attachment(field, stat, key)
+        end
 
       {:ok, nil} ->
         if Keyword.get(opts, :required, false) do
@@ -85,8 +104,9 @@ defmodule Upload.Changeset do
           meta = [validation: :required]
           add_error(changeset, field, message, meta)
         else
-          # delete here?
-          put_assoc(changeset, field, nil)
+          changeset
+          # |> remove_existing_field(field)
+          |> put_assoc(field, nil)
         end
 
       {:ok, _other} ->
@@ -98,6 +118,58 @@ defmodule Upload.Changeset do
         changeset
     end
   end
+
+  # defp remove_existing_field(changeset, field) do
+  #   Ecto.Changeset.prepare_changes(changeset, fn changeset ->
+  #     # record = repo.preload(changeset.data, field)
+
+  #     dbg(changeset)
+  #     dbg(changeset.data)
+
+  #     # Upload.delete_by_key(changeset.changes.avatar.key)
+
+  #     case get_in(get_field(changeset, field), [Access.key(:key)]) do
+  #       nil ->
+  #         nil
+
+  #       # Logger.info("Deleting existing association")
+  #       # delete_existing_association_if_any(changeset, field)
+
+  #       key ->
+  #         Logger.info("Deleting existing entry by key")
+  #         Upload.delete_by_key(key)
+  #     end
+
+  #     # repo = Upload.Config.repo()
+
+  #     # IO.inspect(changeset.data)
+  #     # IO.inspect(repo.reload(changeset.data))
+
+  #     changeset
+  #   end)
+  # end
+
+  # defp delete_existing_association_if_any(changeset, field) do
+  #   repo = Upload.Config.repo()
+
+  #   dbg(changeset.data)
+
+  #   case Map.get(changeset.data, field) do
+  #     %Ecto.Association.NotLoaded{} ->
+  #       raise "Calling cast_attachment requires the field to be preloaded."
+
+  #     nil ->
+  #       :ok
+
+  #     association ->
+  #       dbg(association)
+
+  #       {:ok, _} =
+  #         Ecto.Multi.new()
+  #         |> Upload.Multi.purge(:remove_existing_blob, association)
+  #         |> repo.transaction()
+  #   end
+  # end
 
   @spec validate_attachment(changeset, field, field, validation) :: changeset
   def validate_attachment(changeset, field, blob_field, validation) do
