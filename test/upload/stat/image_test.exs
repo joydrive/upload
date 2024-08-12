@@ -6,12 +6,12 @@ defmodule Upload.Stat.ImageTest do
   alias Upload.Stat.Image
 
   describe "stat/2" do
-    test "returns {:ok, nil} when file is not an image MIME type" do
-      assert Image.stat("path", "not-a-image") == {:ok, nil}
+    test "returns {:ok, %{}} when file is not an image MIME type" do
+      assert Image.stat("path", "not-a-image") == {:ok, %{}}
     end
 
-    test "returns {:ok, nil} when the file does not exist" do
-      assert Image.stat("path", "image/png") == {:ok, nil}
+    test "returns {:ok, %{}} when the file does not exist" do
+      assert Image.stat("path", "image/png") == {:ok, %{}}
     end
   end
 end
