@@ -139,6 +139,6 @@ defmodule Upload.ChangesetTest do
   end
 
   defp key_function(_changeset) do
-    "uploads/users/avatars/123"
+    "uploads/users/123/avatar"
   end
 end

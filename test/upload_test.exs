@@ -14,20 +14,20 @@ defmodule UploadTest do
     test "create a single variant of an upload" do
       changeset = update_person(%{avatar: @upload})
 
-      assert {:ok, %{person: person}} = insert_person(changeset)
+      assert {:ok, person} = insert_person(changeset)
       assert person.avatar
 
       {:ok, [blob_variant]} =
         Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
 
-      assert blob_variant.key == "uploads/users/avatars/123/small.avif"
+      assert blob_variant.key == "uploads/users/123/avatar/small.avif"
       assert blob_variant.key in list_uploaded_keys()
     end
 
     test "replacing a single variant of an upload deletes the old one" do
       changeset = update_person(%{avatar: @upload})
 
-      assert {:ok, %{person: person}} = insert_person(changeset)
+      assert {:ok, person} = insert_person(changeset)
       assert person.avatar
 
       {:ok, [blob_variant1]} =
@@ -46,7 +46,7 @@ defmodule UploadTest do
     test "returns if a variant exists for a blob" do
       changeset = update_person(%{avatar: @upload})
 
-      assert {:ok, %{person: person}} = insert_person(changeset)
+      assert {:ok, person} = insert_person(changeset)
 
       refute Upload.variant_exists?(person.avatar, "small")
 
@@ -60,7 +60,7 @@ defmodule UploadTest do
     test "create a single variant of an upload" do
       changeset = update_person(%{avatar: @upload})
 
-      assert {:ok, %{person: person}} = insert_person(changeset)
+      assert {:ok, person} = insert_person(changeset)
       assert person.avatar
 
       {:ok, [small_variant, small_avif_variant]} =
@@ -74,15 +74,15 @@ defmodule UploadTest do
         )
 
       assert small_variant.key in [
-               "uploads/users/avatars/123/small.jpg",
-               "uploads/users/avatars/123/small.avif"
+               "uploads/users/123/avatar/small.jpg",
+               "uploads/users/123/avatar/small.avif"
              ]
 
       assert small_variant.key in list_uploaded_keys()
 
       assert small_variant.key in [
-               "uploads/users/avatars/123/small.jpg",
-               "uploads/users/avatars/123/small.avif"
+               "uploads/users/123/avatar/small.jpg",
+               "uploads/users/123/avatar/small.avif"
              ]
 
       assert small_avif_variant.key in list_uploaded_keys()
@@ -91,7 +91,7 @@ defmodule UploadTest do
     test "returns an error when a temp file cannot be created" do
       changeset = update_person(%{avatar: @upload})
 
-      assert {:ok, %{person: person}} = insert_person(changeset)
+      assert {:ok, person} = insert_person(changeset)
       assert person.avatar
 
       with_mock(Plug.Upload, random_file: fn _ -> {:error, :boom} end) do
@@ -110,12 +110,12 @@ defmodule UploadTest do
     test "returns an error when the original file cannot be downloaded" do
       changeset = update_person(%{avatar: @upload})
 
-      assert {:ok, %{person: person}} = insert_person(changeset)
+      assert {:ok, person} = insert_person(changeset)
       assert person.avatar
 
       with_mock(Upload.Storage, download: fn _key, _ -> {:error, :boom} end) do
         {:error, "download_and_insert_small_image/jpeg",
-         %Upload.DownloadError{reason: :boom, key: "uploads/users/avatars/123.jpg"}} =
+         %Upload.DownloadError{reason: :boom, key: "uploads/users/123/avatar.jpg"}} =
           Upload.create_multiple_variants(
             person.avatar,
             [
@@ -129,7 +129,7 @@ defmodule UploadTest do
     test "returns an error when a temp file cannot be deleted" do
       changeset = update_person(%{avatar: @upload})
 
-      assert {:ok, %{person: person}} = insert_person(changeset)
+      assert {:ok, person} = insert_person(changeset)
       assert person.avatar
 
       with_mock(File, [:passthrough], rm: fn _path -> {:error, :enoent} end) do
@@ -148,7 +148,7 @@ defmodule UploadTest do
     test "returns an error when attempting to insert a bad key caused by a variant name" do
       changeset = update_person(%{avatar: @upload})
 
-      assert {:ok, %{person: person}} = insert_person(changeset)
+      assert {:ok, person} = insert_person(changeset)
       assert person.avatar
 
       {:error, "download_and_insert_._image/jpeg", changeset} =
@@ -168,7 +168,7 @@ defmodule UploadTest do
     test "can set the ACL for an uploaded blob" do
       changeset = update_person(%{avatar: @upload})
 
-      assert {:ok, %{person: person}} = insert_person(changeset)
+      assert {:ok, person} = insert_person(changeset)
       assert person.avatar
 
       :ok = Upload.put_access_control_list(person.avatar, "public_read")
@@ -191,7 +191,7 @@ defmodule UploadTest do
   end
 
   defp key_function(_changeset) do
-    "uploads/users/avatars/123"
+    "uploads/users/123/avatar"
   end
 
   defp transform_image(source, variant, :"image/jpeg") do

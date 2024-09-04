@@ -18,6 +18,12 @@ defmodule Upload.Multi do
     Multi.run(multi, name, fn _repo, _ctx -> do_upload(blob) end)
   end
 
+  @spec upload(Multi.t(), Multi.name(), Blob.t()) :: Multi.t()
+  def upload(multi, name, %Blob{key: key, path: path} = blob)
+      when is_binary(key) and is_binary(path) do
+    Multi.run(multi, name, fn _repo, _ctx -> do_upload(blob) end)
+  end
+
   @spec upload(Multi.t(), Multi.name(), Multi.fun(Blob.t())) :: Multi.t()
   def upload(multi, name, fun) when is_function(fun) do
     Multi.run(multi, name, fn _repo, ctx -> ctx |> fun.() |> do_upload() end)
@@ -33,6 +39,11 @@ defmodule Upload.Multi do
     with :ok <- Storage.upload(path, key),
          do: {:ok, blob}
   end
+
+  # @spec upload_or_delete(Multi.t(), Multi.name(), Multi.fun(Blob.t())) :: Multi.t()
+  # def upload(multi, name, fun) when is_function(fun) do
+  #   Multi.run(multi, name, fn _repo, ctx -> ctx |> fun.() |> do_upload() end)
+  # end
 
   @doc """
   Upload multiple variants as part of a multi.
@@ -58,13 +69,52 @@ defmodule Upload.Multi do
   end
 
   def handle_changes(multi, changeset, fields) do
-    # dbg(changeset)
-
     changeset.changes
     |> Enum.filter(fn {field, _} -> field in fields end)
     |> Enum.reduce(multi, fn {field, change}, multi ->
       handle_change({field, change}, multi, changeset)
     end)
+  end
+
+  def handle_changes(multi, name, subject, changeset, fields, opts \\ []) do
+    key_function =
+      case Keyword.get(opts, :key_function) do
+        nil -> nil
+        key_function when is_function(key_function, 1) -> key_function
+        _ -> raise ArgumentError, "key_function must be a function of arity 1."
+      end
+
+    multi =
+      Multi.run(multi, name, fn repo, changes ->
+        # This code is run after the record in inserted in the Multi pipeline.
+        # We can use the record ID here to upload the photo.
+        record = Map.get(changes, subject)
+        record = repo.preload(record, fields)
+
+        changeset = Ecto.Changeset.cast(record, changeset.params, [])
+
+        changeset =
+          fields
+          |> Enum.reduce(changeset, fn field, changeset ->
+            Upload.Changeset.cast_attachment(changeset, field,
+              key_function: fn _ ->
+                key_function.(record)
+              end
+            )
+          end)
+
+        changeset.changes
+        |> Enum.filter(fn {field, _} -> field in fields end)
+        |> Enum.reduce(Ecto.Multi.new(), fn {field, change}, multi ->
+          handle_change({field, change}, multi, changeset)
+        end)
+        |> repo.transaction()
+
+        changeset
+        |> repo.update()
+      end)
+
+    multi
   end
 
   # We're setting the upload field to nil so let's check
@@ -79,8 +129,6 @@ defmodule Upload.Multi do
   # We're setting the upload field so let's check
   # if the existing field is set and delete it if so.
   defp handle_change({field, change}, multi, changeset) do
-    # dbg({field, change})
-
     multi = handle_change({field, nil}, multi, changeset)
 
     blob = Ecto.Changeset.apply_changes(change)
