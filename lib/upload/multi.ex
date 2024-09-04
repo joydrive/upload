@@ -89,9 +89,15 @@ defmodule Upload.Multi do
         # This code is run after the record in inserted in the Multi pipeline.
         # We can use the record ID here to upload the photo.
         record = Map.get(changes, subject)
+
+        if is_nil(record) do
+          raise ArgumentError,
+                "The key '#{subject}' is not in the multi changes: #{inspect(changes)}"
+        end
+
         record = repo.preload(record, fields)
 
-        changeset = Ecto.Changeset.cast(record, changeset.params, [])
+        changeset = Ecto.Changeset.cast(record, changeset.params || %{}, [])
 
         changeset =
           fields
