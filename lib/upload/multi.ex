@@ -12,37 +12,45 @@ defmodule Upload.Multi do
 
   @doc """
   Upload a blob to storage.
+
+  ## Options
+
+  - `canned_acl` - The canned ACL to use with S3 if using S3 as the storage
+    backend.
+
   """
-  @spec upload_blob(Multi.t(), Multi.name(), Blob.t()) :: Multi.t()
-  def upload_blob(multi, name, %Blob{key: key, path: path} = blob)
-      when is_binary(key) and is_binary(path) do
-    Multi.run(multi, name, fn _repo, _ctx -> do_upload_blob(blob) end)
-  end
+  def upload_blob(multi, name, blob, opts \\ [])
 
   @spec upload_blob(Multi.t(), Multi.name(), Blob.t()) :: Multi.t()
-  def upload_blob(multi, name, %Blob{key: key, path: path} = blob)
+  def upload_blob(multi, name, %Blob{key: key, path: path} = blob, opts)
       when is_binary(key) and is_binary(path) do
-    Multi.run(multi, name, fn _repo, _ctx -> do_upload_blob(blob) end)
+    Multi.run(multi, name, fn _repo, _ctx -> do_upload_blob(blob, opts) end)
   end
 
   @spec upload_blob(Multi.t(), Multi.name(), Multi.fun(Blob.t())) :: Multi.t()
-  def upload_blob(multi, name, fun) when is_function(fun) do
-    Multi.run(multi, name, fn _repo, ctx -> ctx |> fun.() |> do_upload_blob() end)
+  def upload_blob(multi, name, fun, opts) when is_function(fun) do
+    Multi.run(multi, name, fn _repo, ctx -> ctx |> fun.() |> do_upload_blob(opts) end)
   end
 
-  defp do_upload_blob(nil), do: {:ok, nil}
-  defp do_upload_blob(%NotLoaded{} = blob), do: {:ok, blob}
-  defp do_upload_blob(%Blob{path: nil} = blob), do: {:ok, blob}
+  defp do_upload_blob(nil, _opts), do: {:ok, nil}
+  defp do_upload_blob(%NotLoaded{} = blob, _opts), do: {:ok, blob}
+  defp do_upload_blob(%Blob{path: nil} = blob, _opts), do: {:ok, blob}
 
-  defp do_upload_blob(%Blob{path: path, key: key} = blob) when is_binary(key) do
+  defp do_upload_blob(%Blob{path: path, key: key} = blob, opts) when is_binary(key) do
     Upload.Logger.info("Uploading #{key}")
 
     with :ok <- Storage.upload(path, key),
+         :ok <- Upload.put_access_control_list(blob, opts[:canned_acl] || :private),
          do: {:ok, blob}
   end
 
   @doc """
   Upload multiple variants as part of an `Ecto.Multi`.
+
+   ## Options
+
+  - `canned_acl` - The canned ACL to use with S3 if using S3 as the storage
+    backend.
   """
   def upload_variants(multi, name, fun, variants, transform_fn, opts \\ [])
       when is_function(fun) do
@@ -70,7 +78,8 @@ defmodule Upload.Multi do
 
   If the `field` change is `nil` in the changeset, it will be deleted remotely
   and in your database. If the `field` change in the changeset is an uploadable
-  type such as a `Plug.Upload` or file path, it will be uploaded.
+  type such as a `Plug.Upload` or file path, it will be uploaded, replacing any
+  existing associated upload.
 
   ## Example
 
@@ -82,6 +91,11 @@ defmodule Upload.Multi do
     |> Repo.transaction()
   end
   ```
+
+  ## Options
+
+  - `canned_acl` - The canned ACL to use with S3 if using S3 as the storage
+    backend.
   """
   def handle_changes(multi, name, subject, changeset, field, opts \\ []) do
     key_function = key_function_from_opts(opts)
@@ -110,7 +124,7 @@ defmodule Upload.Multi do
       record_changeset.changes
       |> Enum.reduce(Ecto.Multi.new(), fn {changed_field, change}, multi ->
         # Deletes if the change is 'nil', uploads otherwise.
-        handle_change({changed_field, change}, multi, changeset)
+        handle_change({changed_field, change}, multi, changeset, opts)
       end)
       |> Multi.update("#{field}_attach_blob", record_changeset)
       |> repo.transaction()
@@ -137,7 +151,7 @@ defmodule Upload.Multi do
 
   # We're setting the upload field to nil so let's check
   # if the existing field is set and delete it if so.
-  defp handle_change({field, nil}, multi, changeset) do
+  defp handle_change({field, nil}, multi, changeset, _opts) do
     case Map.get(changeset.data, field) do
       %Upload.Blob{} = blob -> delete_blob(multi, :delete_blob, blob)
       _ -> multi
@@ -146,12 +160,12 @@ defmodule Upload.Multi do
 
   # We're setting the upload field so let's check
   # if the existing field is set and delete it if so.
-  defp handle_change({field, change}, multi, changeset) do
-    multi = handle_change({field, nil}, multi, changeset)
+  defp handle_change({field, change}, multi, changeset, opts) do
+    multi = handle_change({field, nil}, multi, changeset, opts)
 
     blob = Ecto.Changeset.apply_changes(change)
 
-    upload_blob(multi, field, blob)
+    upload_blob(multi, field, blob, opts)
   end
 
   @doc """
@@ -221,12 +235,20 @@ defmodule Upload.Multi do
   @doc """
   Creates and uploads a single variant of an `Upload.Blob` inside of an `Ecto.Multi`.
 
+  ## Example
+
   ```elixir
   Ecto.Multi.new()
   |> Ecto.Multi.insert(:person, changeset)
   |> Upload.Multi.handle_changes(:upload_avatar, :person, changeset, :avatar, key_function: key_function)
   |> Upload.Multi.create_variant(fn ctx -> ctx.person.avatar end, :small, transform_fn: &transform_fn/3)
   ```
+
+  ## Options
+
+  - `canned_acl` - The canned ACL to use with S3 if using S3 as the storage
+    backend.
+
   """
   def create_variant(multi, fun, variant, transform_fn, opts)
       when is_function(fun, 1) and is_function(transform_fn, 3) do
@@ -257,7 +279,8 @@ defmodule Upload.Multi do
         original_blob,
         variant,
         transform_fn,
-        format
+        format,
+        opts
       )
     end)
   end
@@ -267,12 +290,19 @@ defmodule Upload.Multi do
   @doc """
   Creates and uploads multiple variants of an `Upload.Blob` inside of an `Ecto.Multi`.
 
+  ## Example
+
   ```elixir
   Ecto.Multi.new()
   |> Ecto.Multi.insert(:person, changeset)
   |> Upload.Multi.handle_changes(:upload_avatar, :person, changeset, :avatar, key_function: key_function)
   |> Upload.Multi.create_variants(fn ctx -> ctx.person.avatar end, [:small, :large], transform_fn: &transform_fn/3)
   ```
+
+  ## Options
+
+  - `canned_acl` - The canned ACL to use with S3 if using S3 as the storage
+    backend.
   """
   def create_variants(multi, fun, variants, transform_fn, opts)
       when is_function(fun, 1) and is_function(transform_fn, 3) do
@@ -305,13 +335,21 @@ defmodule Upload.Multi do
           original_blob,
           variant,
           transform_fn,
-          format
+          format,
+          opts
         )
       end)
     end)
   end
 
-  defp download_and_insert_variant(multi, original_blob, variant, transform_fn, format) do
+  defp download_and_insert_variant(
+         multi,
+         original_blob,
+         variant,
+         transform_fn,
+         format,
+         opts
+       ) do
     Multi.run(multi, "download_and_insert_#{variant}_#{format}", fn repo, _ ->
       with {:ok, blob_path} <- create_random_file(),
            :ok <- download_file(original_blob.key, blob_path),
@@ -319,7 +357,7 @@ defmodule Upload.Multi do
              call_transform_fn(transform_fn, blob_path, variant, format),
            :ok <- cleanup(blob_path),
            {:ok, blob} <- insert_variant(repo, original_blob, variant, variant_path),
-           {:ok, _} <- do_upload_blob(blob),
+           {:ok, _} <- do_upload_blob(blob, opts),
            :ok <- cleanup(variant_path) do
         {:ok, blob}
       else

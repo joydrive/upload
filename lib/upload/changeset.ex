@@ -1,6 +1,10 @@
 defmodule Upload.Changeset do
   @moduledoc """
-  Functions for use with changesets to upload and validate attachments.
+  Functions for use with changesets to cast and validate attachments.
+
+  These functions will not perform an upload of the `Upload.Blob` as they only
+  create and validate the database record. For synchronizing uploads remotely
+  see `Upload.Multi.handle_changes/6`
 
   ```elixir
   schema "people" do

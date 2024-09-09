@@ -22,7 +22,23 @@ defmodule Upload.MultiTest do
     assert person.avatar.key in list_uploaded_keys()
   end
 
-  test "overwrites deletes old blobs" do
+  test "sets the ACL to public" do
+    assert {:ok, person} = insert_person(%{avatar: @upload})
+    assert person.avatar_id
+
+    with_mock(Storage, [:passthrough], put_access_control_list: fn _key, _acl -> :ok end) do
+      {:ok, person} = update_person(person, %{avatar: @upload})
+
+      assert person.avatar
+      assert person.avatar.key == "uploads/users/#{person.id}/avatar.jpg"
+
+      assert_called(
+        Storage.put_access_control_list("uploads/users/#{person.id}/avatar.jpg", acl: :public)
+      )
+    end
+  end
+
+  test "overwrites and deletes old blobs" do
     {:ok, person} = insert_person(%{avatar: @upload})
 
     assert person.avatar_id
@@ -38,7 +54,7 @@ defmodule Upload.MultiTest do
     end
   end
 
-  describe "handle_changes/2" do
+  describe "handle_changes/6" do
     test "can use the ID in the upload key from a record created from the multi itself" do
       changeset =
         %Person{}
@@ -222,7 +238,8 @@ defmodule Upload.MultiTest do
     |> Upload.Multi.handle_changes(:person, :insert_person, changeset, :avatar,
       key_function: fn user ->
         "uploads/users/#{user.id}/avatar"
-      end
+      end,
+      canned_acl: :public
     )
     |> Repo.transaction()
     |> case do
@@ -237,7 +254,8 @@ defmodule Upload.MultiTest do
     Ecto.Multi.new()
     |> Ecto.Multi.update(:update_person, changeset)
     |> Upload.Multi.handle_changes(:person, :update_person, changeset, :avatar,
-      key_function: &key_function/1
+      key_function: &key_function/1,
+      canned_acl: :public
     )
     |> Repo.transaction()
     |> case do
