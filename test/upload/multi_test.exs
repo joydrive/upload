@@ -210,21 +210,9 @@ defmodule Upload.MultiTest do
   defp delete_person(person) do
     new()
     |> delete(:person, person)
-    |> delete_blob(:avatar, person.avatar)
+    |> delete_blob(:avatar, fn ctx -> ctx.person.avatar end)
     |> Repo.transaction()
   end
-
-  # defp insert_person_old(attrs) do
-  #   changeset =
-  #     %Person{}
-  #     |> Person.changeset(attrs)
-  #     |> Upload.Changeset.cast_attachment(:avatar, key_function: &key_function/1)
-
-  #   new()
-  #   |> insert(:person, changeset)
-  #   |> upload(:avatar, fn ctx -> ctx.person.avatar end)
-  #   |> Repo.transaction()
-  # end
 
   defp insert_person(attrs) do
     changeset = Person.changeset(%Person{}, attrs)

@@ -106,7 +106,9 @@ defmodule Upload do
 
   Calling this multiple times is not the optimal for creating multiple variants
   of a blob at once since this function would download the original blob once
-  per variant. See `create_multiple_variants/3`.
+  per variant. See `create_variants/3` for a more optimal solution.
+
+  If a transaction is needed, see `Upload.Multi.create_variant/5`.
 
   ## Example
 
@@ -118,26 +120,9 @@ defmodule Upload do
   def create_variant(original_blob, variant, transform_fn, opts \\ [])
       when is_function(transform_fn, 3) do
     repo = Upload.Config.repo()
-    variant = to_string(variant)
-    formats = Keyword.get(opts, :formats, [:"image/jpeg"])
 
-    multi =
-      Ecto.Multi.new()
-      |> Upload.Multi.remove_existing_variant(original_blob, variant)
-
-    multi =
-      formats
-      |> Enum.reduce(multi, fn format, multi ->
-        Upload.Multi.download_and_insert_variant(
-          multi,
-          original_blob,
-          variant,
-          transform_fn,
-          format
-        )
-      end)
-
-    multi
+    Ecto.Multi.new()
+    |> Upload.Multi.create_variant(original_blob, variant, transform_fn, opts)
     |> repo.transaction()
     |> case do
       {:ok, multi_result} -> {:ok, Map.values(multi_result)}
@@ -151,18 +136,18 @@ defmodule Upload do
 
   ## Example
 
-      iex> create_multiple_variants(blob, [:small, :large], &transform_fn/2)
+      iex> create_variants(blob, [:small, :large], &transform_fn/2)
       {:ok, [%Blob{...}, %Blob{...}]}
   """
-  @spec create_multiple_variants(Blob.t(), [variant_id()], any()) ::
+  @spec create_variants(Blob.t(), [variant_id()], any()) ::
           {:ok, [Blob.t()]} | {:error, String.t(), any()}
-  def create_multiple_variants(original_blob, variants, transform_fn, opts \\ [])
+  def create_variants(original_blob, variants, transform_fn, opts \\ [])
       when is_function(transform_fn, 3) do
     variants = Enum.map(variants, &to_string/1)
     repo = Upload.Config.repo()
 
     Ecto.Multi.new()
-    |> Upload.Multi.create_multiple_variants(
+    |> Upload.Multi.create_variants(
       original_blob,
       variants,
       transform_fn,

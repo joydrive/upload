@@ -50,13 +50,13 @@ defmodule UploadTest do
     end
   end
 
-  describe "create_multiple_variants/3" do
+  describe "create_variants/3" do
     test "create a single variant of an upload" do
       assert {:ok, person} = insert_person(%{avatar: @upload})
       assert person.avatar
 
       {:ok, [small_variant, small_avif_variant]} =
-        Upload.create_multiple_variants(
+        Upload.create_variants(
           person.avatar,
           [
             "small"
@@ -87,7 +87,7 @@ defmodule UploadTest do
       with_mock(Plug.Upload, random_file: fn _ -> {:error, :boom} end) do
         {:error, "download_and_insert_small_image/jpeg",
          %Upload.RandomFileError{reason: {:error, :boom}}} =
-          Upload.create_multiple_variants(
+          Upload.create_variants(
             person.avatar,
             [
               "small"
@@ -104,7 +104,7 @@ defmodule UploadTest do
       with_mock(Upload.Storage, download: fn _key, _ -> {:error, :boom} end) do
         {:error, "download_and_insert_small_image/jpeg",
          %Upload.DownloadError{reason: :boom, key: "uploads/users/123/avatar.jpg"}} =
-          Upload.create_multiple_variants(
+          Upload.create_variants(
             person.avatar,
             [
               "small"
@@ -121,7 +121,7 @@ defmodule UploadTest do
       with_mock(File, [:passthrough], rm: fn _path -> {:error, :enoent} end) do
         {:error, "download_and_insert_small_image/jpeg",
          %File.Error{reason: :enoent, action: "remove temporary file"}} =
-          Upload.create_multiple_variants(
+          Upload.create_variants(
             person.avatar,
             [
               "small"
@@ -136,7 +136,7 @@ defmodule UploadTest do
       assert person.avatar
 
       {:error, "download_and_insert_._image/jpeg", changeset} =
-        Upload.create_multiple_variants(
+        Upload.create_variants(
           person.avatar,
           [
             "."
@@ -173,21 +173,6 @@ defmodule UploadTest do
 
       error ->
         error
-    end
-  end
-
-  defp update_person(person, attrs, opts \\ []) do
-    key_function = Keyword.get(opts, :key_function, &key_function/1)
-
-    changeset = Person.changeset(person, attrs)
-
-    new()
-    |> update(:person, changeset)
-    |> handle_changes(:upload_avatar, :person, changeset, :avatar, key_function: key_function)
-    |> Repo.transaction()
-    |> case do
-      {:ok, %{person: person}} -> {:ok, person}
-      error -> error
     end
   end
 

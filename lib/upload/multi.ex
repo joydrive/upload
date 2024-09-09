@@ -1,6 +1,7 @@
 defmodule Upload.Multi do
   @moduledoc """
-  Functions to help uploading and removing of blobs as part of an `Ecto.Multi`.
+  Functions for uploading, creating variants, and removing of blobs as part of
+  an `Ecto.Multi`.
   """
 
   alias Ecto.Association.NotLoaded
@@ -12,28 +13,28 @@ defmodule Upload.Multi do
   @doc """
   Upload a blob to storage.
   """
-  @spec upload(Multi.t(), Multi.name(), Blob.t()) :: Multi.t()
-  def upload(multi, name, %Blob{key: key, path: path} = blob)
+  @spec upload_blob(Multi.t(), Multi.name(), Blob.t()) :: Multi.t()
+  def upload_blob(multi, name, %Blob{key: key, path: path} = blob)
       when is_binary(key) and is_binary(path) do
-    Multi.run(multi, name, fn _repo, _ctx -> do_upload(blob) end)
+    Multi.run(multi, name, fn _repo, _ctx -> do_upload_blob(blob) end)
   end
 
-  @spec upload(Multi.t(), Multi.name(), Blob.t()) :: Multi.t()
-  def upload(multi, name, %Blob{key: key, path: path} = blob)
+  @spec upload_blob(Multi.t(), Multi.name(), Blob.t()) :: Multi.t()
+  def upload_blob(multi, name, %Blob{key: key, path: path} = blob)
       when is_binary(key) and is_binary(path) do
-    Multi.run(multi, name, fn _repo, _ctx -> do_upload(blob) end)
+    Multi.run(multi, name, fn _repo, _ctx -> do_upload_blob(blob) end)
   end
 
-  @spec upload(Multi.t(), Multi.name(), Multi.fun(Blob.t())) :: Multi.t()
-  def upload(multi, name, fun) when is_function(fun) do
-    Multi.run(multi, name, fn _repo, ctx -> ctx |> fun.() |> do_upload() end)
+  @spec upload_blob(Multi.t(), Multi.name(), Multi.fun(Blob.t())) :: Multi.t()
+  def upload_blob(multi, name, fun) when is_function(fun) do
+    Multi.run(multi, name, fn _repo, ctx -> ctx |> fun.() |> do_upload_blob() end)
   end
 
-  defp do_upload(nil), do: {:ok, nil}
-  defp do_upload(%NotLoaded{} = blob), do: {:ok, blob}
-  defp do_upload(%Blob{path: nil} = blob), do: {:ok, blob}
+  defp do_upload_blob(nil), do: {:ok, nil}
+  defp do_upload_blob(%NotLoaded{} = blob), do: {:ok, blob}
+  defp do_upload_blob(%Blob{path: nil} = blob), do: {:ok, blob}
 
-  defp do_upload(%Blob{path: path, key: key} = blob) when is_binary(key) do
+  defp do_upload_blob(%Blob{path: path, key: key} = blob) when is_binary(key) do
     Upload.Logger.info("Uploading #{key}")
 
     with :ok <- Storage.upload(path, key),
@@ -41,19 +42,19 @@ defmodule Upload.Multi do
   end
 
   @doc """
-  Upload multiple variants as part of a multi.
+  Upload multiple variants as part of an `Ecto.Multi`.
   """
   def upload_variants(multi, name, fun, variants, transform_fn, opts \\ [])
       when is_function(fun) do
     Multi.run(multi, name, fn _repo, ctx ->
       original_blob = ctx |> fun.()
 
-      Upload.create_multiple_variants(original_blob, variants, transform_fn, opts)
+      Upload.create_variants(original_blob, variants, transform_fn, opts)
     end)
   end
 
   @doc """
-  Upload a variant as part of a multi.
+  Upload a variant as part of an `Ecto.Multi`.
   """
   def upload_variant(multi, name, fun, variant, transform_fn, opts \\ []) when is_function(fun) do
     Multi.run(multi, name, fn _repo, ctx ->
@@ -64,7 +65,23 @@ defmodule Upload.Multi do
   end
 
   @doc """
-  Uploads and attaches a blob to a record using a Multi.
+  Uploads and attaches a blob to a record using an `Ecto.Multi`. This should be
+  used inside of your Phoenix Contexts to handle uploads and deletes.
+
+  If the `field` change is `nil` in the changeset, it will be deleted remotely
+  and in your database. If the `field` change in the changeset is an uploadable
+  type such as a `Plug.Upload` or file path, it will be uploaded.
+
+  ## Example
+
+  ```elixir
+  defp insert_person(changeset) do
+    Ecto.Multi.new()
+    |> Ecto.Multi.insert(:person, changeset)
+    |> Upload.Multi.handle_changes(:upload_avatar, :person, changeset, :avatar, key_function: &key_function/1)
+    |> Repo.transaction()
+  end
+  ```
   """
   def handle_changes(multi, name, subject, changeset, field, opts \\ []) do
     key_function = key_function_from_opts(opts)
@@ -134,11 +151,22 @@ defmodule Upload.Multi do
 
     blob = Ecto.Changeset.apply_changes(change)
 
-    upload(multi, field, blob)
+    upload_blob(multi, field, blob)
   end
 
   @doc """
-  Remove a blob and it's variants from storage.
+  Remove an `Upload.Blob` and it's variants from storage.
+
+  ## Example
+
+  ```elixir
+  defp delete_person(person) do
+    Ecto.Multi.new()
+    |> Ecto.Multi.delete(:person, person)
+    |> Upload.Multi.delete_blob(:avatar, fn ctx -> ctx.person.avatar end)
+    |> Repo.transaction()
+  end
+  ```
   """
   @spec delete_blob(Multi.t(), Multi.name(), Blob.t()) :: Multi.t()
   def delete_blob(multi, name, %Blob{key: key} = blob) when is_binary(key) do
@@ -178,7 +206,7 @@ defmodule Upload.Multi do
     :ok
   end
 
-  def remove_existing_variant(multi, original_blob, variant) do
+  defp remove_existing_variant(multi, original_blob, variant) do
     case Upload.get_variant(original_blob, variant) do
       nil ->
         multi
@@ -188,16 +216,91 @@ defmodule Upload.Multi do
     end
   end
 
-  def create_multiple_variants(multi, original_blob, variants, transform_fn, opts \\ [])
+  def create_variant(multi, original_blob, variant, transform_fn, opts \\ [])
+
+  @doc """
+  Creates and uploads a single variant of an `Upload.Blob` inside of an `Ecto.Multi`.
+
+  ```elixir
+  Ecto.Multi.new()
+  |> Ecto.Multi.insert(:person, changeset)
+  |> Upload.Multi.handle_changes(:upload_avatar, :person, changeset, :avatar, key_function: key_function)
+  |> Upload.Multi.create_variant(fn ctx -> ctx.person.avatar end, :small, transform_fn: &transform_fn/3)
+  ```
+  """
+  def create_variant(multi, fun, variant, transform_fn, opts)
+      when is_function(fun, 1) and is_function(transform_fn, 3) do
+    repo = Upload.Config.repo()
+
+    Multi.run(multi, opts[:multi_name] || :create_variants, fn ctx ->
+      case fun.(ctx) do
+        nil ->
+          {:ok, nil}
+
+        %Blob{} = original_blob ->
+          Multi.new()
+          |> create_variant(original_blob, variant, transform_fn, opts)
+          |> repo.transaction()
+      end
+    end)
+  end
+
+  def create_variant(multi, original_blob, variant, transform_fn, opts) do
+    variant = to_string(variant)
+    formats = Keyword.get(opts, :formats, [:"image/jpeg"])
+
+    multi = remove_existing_variant(multi, original_blob, variant)
+
+    Enum.reduce(formats, multi, fn format, multi ->
+      download_and_insert_variant(
+        multi,
+        original_blob,
+        variant,
+        transform_fn,
+        format
+      )
+    end)
+  end
+
+  def create_variants(multi, fun, variants, transform_fn, opts \\ [])
+
+  @doc """
+  Creates and uploads multiple variants of an `Upload.Blob` inside of an `Ecto.Multi`.
+
+  ```elixir
+  Ecto.Multi.new()
+  |> Ecto.Multi.insert(:person, changeset)
+  |> Upload.Multi.handle_changes(:upload_avatar, :person, changeset, :avatar, key_function: key_function)
+  |> Upload.Multi.create_variants(fn ctx -> ctx.person.avatar end, [:small, :large], transform_fn: &transform_fn/3)
+  ```
+  """
+  def create_variants(multi, fun, variants, transform_fn, opts)
+      when is_function(fun, 1) and is_function(transform_fn, 3) do
+    repo = Upload.Config.repo()
+
+    Multi.run(multi, opts[:multi_name] || :create_variants, fn ctx ->
+      case fun.(ctx) do
+        nil ->
+          {:ok, nil}
+
+        %Blob{} = original_blob ->
+          Multi.new()
+          |> create_variants(original_blob, variants, transform_fn, opts)
+          |> repo.transaction()
+      end
+    end)
+  end
+
+  def create_variants(multi, original_blob, variants, transform_fn, opts)
       when is_function(transform_fn, 3) do
     variants = Enum.map(variants, &to_string/1)
     formats = Keyword.get(opts, :formats, [:"image/jpeg"])
 
     Enum.reduce(variants, multi, fn variant, multi ->
-      multi = Upload.Multi.remove_existing_variant(multi, original_blob, variant)
+      multi = remove_existing_variant(multi, original_blob, variant)
 
       Enum.reduce(formats, multi, fn format, multi ->
-        Upload.Multi.download_and_insert_variant(
+        download_and_insert_variant(
           multi,
           original_blob,
           variant,
@@ -208,7 +311,7 @@ defmodule Upload.Multi do
     end)
   end
 
-  def download_and_insert_variant(multi, original_blob, variant, transform_fn, format) do
+  defp download_and_insert_variant(multi, original_blob, variant, transform_fn, format) do
     Multi.run(multi, "download_and_insert_#{variant}_#{format}", fn repo, _ ->
       with {:ok, blob_path} <- create_random_file(),
            :ok <- download_file(original_blob.key, blob_path),
@@ -216,7 +319,7 @@ defmodule Upload.Multi do
              call_transform_fn(transform_fn, blob_path, variant, format),
            :ok <- cleanup(blob_path),
            {:ok, blob} <- insert_variant(repo, original_blob, variant, variant_path),
-           {:ok, _} <- do_upload(blob),
+           {:ok, _} <- do_upload_blob(blob),
            :ok <- cleanup(variant_path) do
         {:ok, blob}
       else
