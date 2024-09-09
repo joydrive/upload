@@ -12,9 +12,7 @@ defmodule UploadTest do
 
   describe "create_variant/3" do
     test "create a single variant of an upload" do
-      changeset = update_person(%{avatar: @upload})
-
-      assert {:ok, person} = insert_person(changeset)
+      assert {:ok, person} = insert_person(%{avatar: @upload})
       assert person.avatar
 
       {:ok, [blob_variant]} =
@@ -25,9 +23,7 @@ defmodule UploadTest do
     end
 
     test "replacing a single variant of an upload deletes the old one" do
-      changeset = update_person(%{avatar: @upload})
-
-      assert {:ok, person} = insert_person(changeset)
+      assert {:ok, person} = insert_person(%{avatar: @upload})
       assert person.avatar
 
       {:ok, [blob_variant1]} =
@@ -44,9 +40,7 @@ defmodule UploadTest do
 
   describe "variant_exists?/2" do
     test "returns if a variant exists for a blob" do
-      changeset = update_person(%{avatar: @upload})
-
-      assert {:ok, person} = insert_person(changeset)
+      assert {:ok, person} = insert_person(%{avatar: @upload})
 
       refute Upload.variant_exists?(person.avatar, "small")
 
@@ -58,9 +52,7 @@ defmodule UploadTest do
 
   describe "create_multiple_variants/3" do
     test "create a single variant of an upload" do
-      changeset = update_person(%{avatar: @upload})
-
-      assert {:ok, person} = insert_person(changeset)
+      assert {:ok, person} = insert_person(%{avatar: @upload})
       assert person.avatar
 
       {:ok, [small_variant, small_avif_variant]} =
@@ -89,9 +81,7 @@ defmodule UploadTest do
     end
 
     test "returns an error when a temp file cannot be created" do
-      changeset = update_person(%{avatar: @upload})
-
-      assert {:ok, person} = insert_person(changeset)
+      assert {:ok, person} = insert_person(%{avatar: @upload})
       assert person.avatar
 
       with_mock(Plug.Upload, random_file: fn _ -> {:error, :boom} end) do
@@ -108,9 +98,7 @@ defmodule UploadTest do
     end
 
     test "returns an error when the original file cannot be downloaded" do
-      changeset = update_person(%{avatar: @upload})
-
-      assert {:ok, person} = insert_person(changeset)
+      assert {:ok, person} = insert_person(%{avatar: @upload})
       assert person.avatar
 
       with_mock(Upload.Storage, download: fn _key, _ -> {:error, :boom} end) do
@@ -127,9 +115,7 @@ defmodule UploadTest do
     end
 
     test "returns an error when a temp file cannot be deleted" do
-      changeset = update_person(%{avatar: @upload})
-
-      assert {:ok, person} = insert_person(changeset)
+      assert {:ok, person} = insert_person(%{avatar: @upload})
       assert person.avatar
 
       with_mock(File, [:passthrough], rm: fn _path -> {:error, :enoent} end) do
@@ -146,9 +132,7 @@ defmodule UploadTest do
     end
 
     test "returns an error when attempting to insert a bad key caused by a variant name" do
-      changeset = update_person(%{avatar: @upload})
-
-      assert {:ok, person} = insert_person(changeset)
+      assert {:ok, person} = insert_person(%{avatar: @upload})
       assert person.avatar
 
       {:error, "download_and_insert_._image/jpeg", changeset} =
@@ -166,28 +150,45 @@ defmodule UploadTest do
 
   describe "put_access_control_list/2" do
     test "can set the ACL for an uploaded blob" do
-      changeset = update_person(%{avatar: @upload})
-
-      assert {:ok, person} = insert_person(changeset)
+      assert {:ok, person} = insert_person(%{avatar: @upload})
       assert person.avatar
 
       :ok = Upload.put_access_control_list(person.avatar, "public_read")
     end
   end
 
-  defp insert_person(changeset) do
-    new()
-    |> insert(:person, changeset)
-    |> upload(:avatar, fn ctx -> ctx.person.avatar end)
-    |> Repo.transaction()
-  end
-
-  defp update_person(attrs, opts \\ []) do
+  defp insert_person(attrs, opts \\ []) do
     key_function = Keyword.get(opts, :key_function, &key_function/1)
 
-    %Person{}
-    |> Person.changeset(attrs)
-    |> Upload.Changeset.cast_attachment(:avatar, key_function: key_function)
+    changeset = Person.changeset(%Person{}, attrs)
+
+    new()
+    |> insert(:person, changeset)
+    |> handle_changes(:upload_avatar, :person, changeset, :avatar, key_function: key_function)
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{person: person}} ->
+        person = Repo.reload(person) |> Repo.preload(:avatar)
+        {:ok, person}
+
+      error ->
+        error
+    end
+  end
+
+  defp update_person(person, attrs, opts \\ []) do
+    key_function = Keyword.get(opts, :key_function, &key_function/1)
+
+    changeset = Person.changeset(person, attrs)
+
+    new()
+    |> update(:person, changeset)
+    |> handle_changes(:upload_avatar, :person, changeset, :avatar, key_function: key_function)
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{person: person}} -> {:ok, person}
+      error -> error
+    end
   end
 
   defp key_function(_changeset) do

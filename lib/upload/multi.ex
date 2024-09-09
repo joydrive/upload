@@ -6,8 +6,8 @@ defmodule Upload.Multi do
   alias Ecto.Association.NotLoaded
   alias Ecto.Multi
   alias Upload.Blob
-  alias Upload.Storage
   alias Upload.Logger
+  alias Upload.Storage
 
   @doc """
   Upload a blob to storage.
@@ -40,11 +40,6 @@ defmodule Upload.Multi do
          do: {:ok, blob}
   end
 
-  # @spec upload_or_delete(Multi.t(), Multi.name(), Multi.fun(Blob.t())) :: Multi.t()
-  # def upload(multi, name, fun) when is_function(fun) do
-  #   Multi.run(multi, name, fn _repo, ctx -> ctx |> fun.() |> do_upload() end)
-  # end
-
   @doc """
   Upload multiple variants as part of a multi.
   """
@@ -68,59 +63,59 @@ defmodule Upload.Multi do
     end)
   end
 
-  def handle_changes(multi, changeset, fields) do
-    changeset.changes
-    |> Enum.filter(fn {field, _} -> field in fields end)
-    |> Enum.reduce(multi, fn {field, change}, multi ->
-      handle_change({field, change}, multi, changeset)
+  @doc """
+  Uploads and attaches a blob to a record using a Multi.
+  """
+  def handle_changes(multi, name, subject, changeset, field, opts \\ []) do
+    key_function = key_function_from_opts(opts)
+
+    Multi.run(multi, name, fn repo, changes ->
+      # This code is run after the record in inserted in the Multi pipeline.
+      # We can use the record ID here to upload the photo.
+      record = Map.get(changes, subject)
+
+      if is_nil(record) do
+        raise ArgumentError,
+              "The key '#{subject}' is not in the multi changes: #{inspect(changes)}"
+      end
+
+      record = repo.preload(record, [field])
+
+      record_changeset =
+        record
+        |> Ecto.Changeset.cast(%{field => Map.get(changeset.params, to_string(field))}, [])
+        |> Upload.Changeset.cast_attachment(field,
+          key_function: fn _ ->
+            key_function.(record)
+          end
+        )
+
+      record_changeset.changes
+      |> Enum.reduce(Ecto.Multi.new(), fn {changed_field, change}, multi ->
+        # Deletes if the change is 'nil', uploads otherwise.
+        handle_change({changed_field, change}, multi, changeset)
+      end)
+      |> Multi.update("#{field}_attach_blob", record_changeset)
+      |> repo.transaction()
+      |> case do
+        {:ok, result} -> {:ok, result["#{field}_attach_blob"]}
+        error -> error
+      end
     end)
   end
 
-  def handle_changes(multi, name, subject, changeset, fields, opts \\ []) do
-    key_function =
-      case Keyword.get(opts, :key_function) do
-        nil -> nil
-        key_function when is_function(key_function, 1) -> key_function
-        _ -> raise ArgumentError, "key_function must be a function of arity 1."
-      end
+  defp key_function_from_opts(opts) do
+    case Keyword.get(opts, :key_function) do
+      nil ->
+        nil
 
-    multi =
-      Multi.run(multi, name, fn repo, changes ->
-        # This code is run after the record in inserted in the Multi pipeline.
-        # We can use the record ID here to upload the photo.
-        record = Map.get(changes, subject)
+      key_function when is_function(key_function, 1) ->
+        key_function
 
-        if is_nil(record) do
-          raise ArgumentError,
-                "The key '#{subject}' is not in the multi changes: #{inspect(changes)}"
-        end
-
-        record = repo.preload(record, fields)
-
-        changeset = Ecto.Changeset.cast(record, changeset.params || %{}, [])
-
-        changeset =
-          fields
-          |> Enum.reduce(changeset, fn field, changeset ->
-            Upload.Changeset.cast_attachment(changeset, field,
-              key_function: fn _ ->
-                key_function.(record)
-              end
-            )
-          end)
-
-        changeset.changes
-        |> Enum.filter(fn {field, _} -> field in fields end)
-        |> Enum.reduce(Ecto.Multi.new(), fn {field, change}, multi ->
-          handle_change({field, change}, multi, changeset)
-        end)
-        |> repo.transaction()
-
-        changeset
-        |> repo.update()
-      end)
-
-    multi
+      unexpected ->
+        raise ArgumentError,
+              "key_function must be a function of arity 1. Got #{inspect(unexpected)}"
+    end
   end
 
   # We're setting the upload field to nil so let's check
@@ -191,6 +186,26 @@ defmodule Upload.Multi do
       existing_variant_blob ->
         delete_blob(multi, :remove_existing_variant, existing_variant_blob)
     end
+  end
+
+  def create_multiple_variants(multi, original_blob, variants, transform_fn, opts \\ [])
+      when is_function(transform_fn, 3) do
+    variants = Enum.map(variants, &to_string/1)
+    formats = Keyword.get(opts, :formats, [:"image/jpeg"])
+
+    Enum.reduce(variants, multi, fn variant, multi ->
+      multi = Upload.Multi.remove_existing_variant(multi, original_blob, variant)
+
+      Enum.reduce(formats, multi, fn format, multi ->
+        Upload.Multi.download_and_insert_variant(
+          multi,
+          original_blob,
+          variant,
+          transform_fn,
+          format
+        )
+      end)
+    end)
   end
 
   def download_and_insert_variant(multi, original_blob, variant, transform_fn, format) do

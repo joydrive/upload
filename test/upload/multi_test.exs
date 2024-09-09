@@ -47,7 +47,7 @@ defmodule Upload.MultiTest do
       {:ok, %{person: person}} =
         Ecto.Multi.new()
         |> Ecto.Multi.insert(:insert_person, changeset)
-        |> Upload.Multi.handle_changes(:person, :insert_person, changeset, [:avatar],
+        |> Upload.Multi.handle_changes(:person, :insert_person, changeset, :avatar,
           key_function: fn user ->
             "uploads/users/#{user.id}/avatar"
           end
@@ -63,35 +63,35 @@ defmodule Upload.MultiTest do
       key = person.avatar.key
       assert key in list_uploaded_keys()
 
-      changeset =
-        person
-        |> Person.changeset(%{avatar: @upload})
-        |> Upload.Changeset.cast_attachment(:avatar,
-          key_function: fn _ -> "uploads/users/avatars/456" end
-        )
+      changeset = Person.changeset(person, %{avatar: @upload})
 
       {:ok, %{update: person}} =
         Ecto.Multi.new()
         |> Ecto.Multi.update(:update, changeset)
-        |> Upload.Multi.handle_changes(changeset, [:avatar])
+        |> Upload.Multi.handle_changes(:upload, :update, changeset, :avatar,
+          key_function: fn user ->
+            "uploads/users/#{user.id}/avatar"
+          end
+        )
         |> Repo.transaction()
 
       assert list_uploaded_keys() == [person.avatar.key]
     end
 
     test "can be used to insert and delete associated uploads" do
-      changeset =
-        %Person{}
-        |> Person.changeset(%{avatar: @upload})
-        |> Upload.Changeset.cast_attachment(:avatar,
-          key_function: fn _ -> "uploads/users/123/avatar" end
-        )
+      changeset = Person.changeset(%Person{}, %{avatar: @upload})
 
       {:ok, %{insert: person}} =
         Ecto.Multi.new()
         |> Ecto.Multi.insert(:insert, changeset)
-        |> Upload.Multi.handle_changes(changeset, [:avatar])
+        |> Upload.Multi.handle_changes(:upload, :insert, changeset, :avatar,
+          key_function: fn user ->
+            "uploads/users/#{user.id}/avatar"
+          end
+        )
         |> Repo.transaction()
+
+      person = person |> Repo.reload() |> Repo.preload(:avatar)
 
       key = person.avatar.key
       assert key in list_uploaded_keys()
@@ -231,7 +231,7 @@ defmodule Upload.MultiTest do
 
     Ecto.Multi.new()
     |> Ecto.Multi.insert(:insert_person, changeset)
-    |> Upload.Multi.handle_changes(:person, :insert_person, changeset, [:avatar],
+    |> Upload.Multi.handle_changes(:person, :insert_person, changeset, :avatar,
       key_function: fn user ->
         "uploads/users/#{user.id}/avatar"
       end
@@ -248,7 +248,7 @@ defmodule Upload.MultiTest do
 
     Ecto.Multi.new()
     |> Ecto.Multi.update(:update_person, changeset)
-    |> Upload.Multi.handle_changes(:person, :update_person, changeset, [:avatar],
+    |> Upload.Multi.handle_changes(:person, :update_person, changeset, :avatar,
       key_function: &key_function/1
     )
     |> Repo.transaction()

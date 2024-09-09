@@ -67,23 +67,11 @@ defmodule Upload.Changeset do
   """
   @spec cast_attachment(changeset(), field(), cast_opts()) :: changeset()
   def cast_attachment(changeset, field, opts \\ []) do
-    key =
-      case Keyword.get(opts, :key_function) do
-        nil -> nil
-        key_function when is_function(key_function, 1) -> key_function.(changeset)
-        _ -> raise ArgumentError, "key_function must be a function of arity 1."
-      end
-
-    # changeset =
-    #   update_in(changeset.data, fn data ->
-    #     Upload.Config.repo().preload(data, field)
-    #   end)
+    key_function = key_function_from_opts(opts)
 
     case Map.fetch(changeset.params, to_string(field)) do
       {:ok, %Plug.Upload{} = upload} ->
-        changeset
-        # |> remove_existing_field(field)
-        |> put_attachment(field, upload, key)
+        put_attachment(changeset, field, upload, key_function.(changeset))
 
       {:ok, path} when is_binary(path) ->
         case Upload.stat(path) do
@@ -93,9 +81,7 @@ defmodule Upload.Changeset do
             add_error(changeset, field, message, meta)
 
           {:ok, stat} ->
-            changeset
-            # |> remove_existing_field(field)
-            |> put_attachment(field, stat, key)
+            put_attachment(changeset, field, stat, key_function.(changeset))
         end
 
       {:ok, nil} ->
@@ -104,9 +90,7 @@ defmodule Upload.Changeset do
           meta = [validation: :required]
           add_error(changeset, field, message, meta)
         else
-          changeset
-          # |> remove_existing_field(field)
-          |> put_assoc(field, nil)
+          put_assoc(changeset, field, nil)
         end
 
       {:ok, _other} ->
@@ -116,6 +100,20 @@ defmodule Upload.Changeset do
 
       :error ->
         changeset
+    end
+  end
+
+  defp key_function_from_opts(opts) do
+    case Keyword.get(opts, :key_function) do
+      nil ->
+        nil
+
+      key_function when is_function(key_function, 1) ->
+        key_function
+
+      unexpected ->
+        raise ArgumentError,
+              "key_function must be a function of arity 1. Got #{inspect(unexpected)}"
     end
   end
 

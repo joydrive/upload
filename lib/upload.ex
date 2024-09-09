@@ -159,27 +159,15 @@ defmodule Upload do
   def create_multiple_variants(original_blob, variants, transform_fn, opts \\ [])
       when is_function(transform_fn, 3) do
     variants = Enum.map(variants, &to_string/1)
-    formats = Keyword.get(opts, :formats, [:"image/jpeg"])
-
     repo = Upload.Config.repo()
-    multi = Ecto.Multi.new()
 
-    variants
-    |> Enum.reduce(multi, fn variant, multi ->
-      multi
-      |> Upload.Multi.remove_existing_variant(original_blob, variant)
-
-      formats
-      |> Enum.reduce(multi, fn format, multi ->
-        Upload.Multi.download_and_insert_variant(
-          multi,
-          original_blob,
-          variant,
-          transform_fn,
-          format
-        )
-      end)
-    end)
+    Ecto.Multi.new()
+    |> Upload.Multi.create_multiple_variants(
+      original_blob,
+      variants,
+      transform_fn,
+      opts
+    )
     |> repo.transaction()
     |> case do
       {:ok, multi_result} ->
