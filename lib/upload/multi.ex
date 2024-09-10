@@ -94,6 +94,11 @@ defmodule Upload.Multi do
 
   - `canned_acl` - The canned ACL to use with S3 if using S3 as the storage
     backend.
+  - `key_function` - A function which recieves the schema specified by `subject`
+    from the multi and must return a file storage path without the extension.
+  - `validate` - A 2 arity function which recieves the changeset and the field
+    being modified. Additional changeset logic can be added here, such as
+    validating the file format or size of the upload.
   """
   def handle_changes(multi, name, subject, changeset, field, opts \\ []) do
     key_function = key_function_from_opts(opts)
