@@ -1,11 +1,11 @@
-defmodule Upload.Adapters.FakeTest do
+defmodule UploadOld.Adapters.FakeTest do
   use ExUnit.Case, async: true
-  doctest Upload.Adapters.Fake
+  doctest UploadOld.Adapters.Fake
 
-  alias Upload.Adapters.Fake, as: Adapter
+  alias UploadOld.Adapters.Fake, as: Adapter
 
   @fixture Path.expand("../../fixtures/text.txt", __DIR__)
-  @upload %Upload{path: @fixture, filename: "text.txt", key: "foo/text.txt"}
+  @upload %UploadOld{path: @fixture, filename: "text.txt", key: "foo/text.txt"}
 
   test "get_url/1" do
     assert Adapter.get_url("foo/bar.txt") == "foo/bar.txt"
@@ -16,7 +16,7 @@ defmodule Upload.Adapters.FakeTest do
   end
 
   test "transfer/1" do
-    assert {:ok, %Upload{status: :transferred}} = Adapter.transfer(@upload)
+    assert {:ok, %UploadOld{status: :transferred}} = Adapter.transfer(@upload)
   end
 
   test "delete/1" do

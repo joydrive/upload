@@ -1,24 +1,24 @@
-defmodule Upload.Adapters.Local do
+defmodule UploadOld.Adapters.Local do
   @moduledoc """
-  An `Upload.Adapter` that saves files to disk.
+  An `UploadOld.Adapter` that saves files to disk.
 
   ### Configuration
 
-      config :upload, Upload.Adapters.Local,
+      config :upload, UploadOld.Adapters.Local,
         base_url: "/uploads", # optional
         storage_path: "priv/static/uploads" # optional
 
   """
 
-  use Upload.Adapter
-  alias Upload.Config
+  use UploadOld.Adapter
+  alias UploadOld.Config
 
   @doc """
   Path where files are stored. Defaults to `priv/static/uploads`.
 
   ## Examples
 
-      iex> Upload.Adapters.Local.storage_path()
+      iex> UploadOld.Adapters.Local.storage_path()
       "priv/static/uploads"
 
   """
@@ -31,7 +31,7 @@ defmodule Upload.Adapters.Local do
 
   ## Examples
 
-      iex> Upload.Adapters.Local.base_url()
+      iex> UploadOld.Adapters.Local.base_url()
       "/uploads"
 
   """
@@ -46,13 +46,13 @@ defmodule Upload.Adapters.Local do
   def get_signed_url(key, _opts), do: {:ok, get_url(key)}
 
   @impl true
-  def transfer(%Upload{key: key, path: path} = upload) do
+  def transfer(%UploadOld{key: key, path: path} = upload) do
     filename = Path.join(storage_path(), key)
     directory = Path.dirname(filename)
 
     with :ok <- File.mkdir_p(directory),
          :ok <- File.cp(path, filename) do
-      {:ok, %Upload{upload | status: :transferred}}
+      {:ok, %UploadOld{upload | status: :transferred}}
     else
       _ ->
         {:error, "failed to transfer file"}

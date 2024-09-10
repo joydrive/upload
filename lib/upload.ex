@@ -1,4 +1,4 @@
-defmodule Upload do
+defmodule UploadOld do
   @moduledoc """
   An opinionated file uploader.
   """
@@ -6,13 +6,13 @@ defmodule Upload do
   @enforce_keys [:key, :path, :filename]
   defstruct [:key, :path, :filename, status: :pending]
 
-  @type t :: %Upload{
+  @type t :: %UploadOld{
           key: String.t(),
           filename: String.t(),
           path: String.t()
         }
 
-  @type transferred :: %Upload{
+  @type transferred :: %UploadOld{
           key: String.t(),
           filename: String.t(),
           path: String.t(),
@@ -26,7 +26,7 @@ defmodule Upload do
   Get the adapter from config.
   """
   def adapter do
-    Upload.Config.get(__MODULE__, :adapter, Upload.Adapters.Local)
+    UploadOld.Config.get(__MODULE__, :adapter, UploadOld.Adapters.Local)
   end
 
   @doc """
@@ -35,21 +35,21 @@ defmodule Upload do
 
   ### Local
 
-      iex> Upload.get_url("123456.png")
-      "/uploads/123456.png"
+      iex> UploadOld.get_url("123456.png")
+      "/UploadOlds/123456.png"
 
   ### S3
 
-      iex> Upload.get_url("123456.png")
+      iex> UploadOld.get_url("123456.png")
       "https://my_bucket_name.s3.amazonaws.com/123456.png"
 
   ### Fake / Test
 
-      iex> Upload.get_url("123456.png")
+      iex> UploadOld.get_url("123456.png")
       "123456.png"
 
   """
-  @spec get_url(Upload.t() | String.t()) :: String.t()
+  @spec get_url(UploadOld.t() | String.t()) :: String.t()
   def get_url(%__MODULE__{key: key}), do: get_url(key)
   def get_url(key) when is_binary(key), do: adapter().get_url(key)
 
@@ -59,14 +59,14 @@ defmodule Upload do
 
   ### Examples
 
-      iex> Upload.get_signed_url("123456.png")
+      iex> UploadOld.get_signed_url("123456.png")
       {:ok, "http://yoururl.com/123456.png?X-Amz-Expires=3600..."}
 
-      iex> Upload.get_signed_url("123456.png", expires_in: 4200)
+      iex> UploadOld.get_signed_url("123456.png", expires_in: 4200)
       {:ok, "http://yoururl.com/123456.png?X-Amz-Expires=4200..."}
 
   """
-  @spec get_signed_url(Upload.t() | String.t(), Keyword.t()) ::
+  @spec get_signed_url(UploadOld.t() | String.t(), Keyword.t()) ::
           {:ok, String.t()} | {:error, String.t()}
   def get_signed_url(upload, opts \\ [])
   def get_signed_url(%__MODULE__{key: key}, opts), do: get_signed_url(key, opts)
@@ -75,7 +75,7 @@ defmodule Upload do
   @doc """
   Transfer the file to where it will be stored.
   """
-  @spec transfer(Upload.t()) :: {:ok, Upload.transferred()} | {:error, String.t()}
+  @spec transfer(UploadOld.t()) :: {:ok, UploadOld.transferred()} | {:error, String.t()}
   def transfer(%__MODULE__{} = upload), do: adapter().transfer(upload)
 
   @doc """
@@ -89,16 +89,16 @@ defmodule Upload do
 
   ## Examples
 
-      iex> Upload.cast(%Plug.Upload{path: "/path/to/foo.png", filename: "foo.png"})
-      {:ok, %Upload{path: "/path/to/foo.png", filename: "foo.png", key: "123456.png"}}
+      iex> UploadOld.cast(%Plug.Upload{path: "/path/to/foo.png", filename: "foo.png"})
+      {:ok, %UploadOld{path: "/path/to/foo.png", filename: "foo.png", key: "123456.png"}}
 
-      iex> Upload.cast(100)
+      iex> UploadOld.cast(100)
       :error
 
   """
-  @spec cast(uploadable, list) :: {:ok, Upload.t()} | :error
+  @spec cast(uploadable, list) :: {:ok, UploadOld.t()} | :error
   def cast(uploadable, opts \\ [])
-  def cast(%Upload{} = upload, _opts), do: {:ok, upload}
+  def cast(%UploadOld{} = upload, _opts), do: {:ok, upload}
 
   def cast(%Plug.Upload{filename: filename, path: path}, opts) do
     do_cast(filename, path, opts)
@@ -124,7 +124,7 @@ defmodule Upload do
   """
   @spec cast_path(uploadable_path, list) :: {:ok, Upload.t()} | :error
   def cast_path(path, opts \\ [])
-  def cast_path(%Upload{} = upload, _opts), do: {:ok, upload}
+  def cast_path(%UploadOld{} = upload, _opts), do: {:ok, upload}
 
   def cast_path(path, opts) when is_binary(path) do
     path
@@ -184,22 +184,22 @@ defmodule Upload do
 
   ## Examples
 
-      iex> Upload.get_extension("foo.png")
+      iex> UploadOld.get_extension("foo.png")
       ".png"
 
-      iex> Upload.get_extension("foo.PNG")
+      iex> UploadOld.get_extension("foo.PNG")
       ".png"
 
-      iex> Upload.get_extension("foo")
+      iex> UploadOld.get_extension("foo")
       ""
 
-      iex> {:ok, upload} = Upload.cast_path("/path/to/foo.png")
-      ...> Upload.get_extension(upload)
+      iex> {:ok, upload} = UploadOld.cast_path("/path/to/foo.png")
+      ...> UploadOld.get_extension(upload)
       ".png"
 
   """
-  @spec get_extension(String.t() | Upload.t()) :: String.t()
-  def get_extension(%Upload{filename: filename}) do
+  @spec get_extension(String.t() | UploadOld.t()) :: String.t()
+  def get_extension(%UploadOld{filename: filename}) do
     get_extension(filename)
   end
 

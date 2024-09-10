@@ -1,12 +1,12 @@
-defmodule Upload.Adapters.TestTest do
+defmodule UploadOld.Adapters.TestTest do
   use ExUnit.Case, async: true
 
-  alias Upload.Adapters.Test, as: Adapter
+  alias UploadOld.Adapters.Test, as: Adapter
 
-  doctest Upload.Adapters.Test
+  doctest UploadOld.Adapters.Test
 
   @fixture Path.expand("../../fixtures/text.txt", __DIR__)
-  @upload %Upload{path: @fixture, filename: "text.txt", key: "foo/text.txt"}
+  @upload %UploadOld{path: @fixture, filename: "text.txt", key: "foo/text.txt"}
 
   test "get_uploads/1 and put_upload/1" do
     assert Adapter.get_uploads() == %{}
@@ -16,8 +16,8 @@ defmodule Upload.Adapters.TestTest do
 
   test "transfer/1 adds the upload to state" do
     assert Adapter.get_uploads() == %{}
-    assert {:ok, %Upload{key: key}} = Adapter.transfer(@upload)
-    assert Map.get(Adapter.get_uploads(), key) == %Upload{@upload | status: :transferred}
+    assert {:ok, %UploadOld{key: key}} = Adapter.transfer(@upload)
+    assert Map.get(Adapter.get_uploads(), key) == %UploadOld{@upload | status: :transferred}
   end
 
   test "get_url/1 just returns the key" do
@@ -29,7 +29,7 @@ defmodule Upload.Adapters.TestTest do
   end
 
   test "delete/1 removes the upload from the state" do
-    assert {:ok, %Upload{key: key}} = Adapter.transfer(@upload)
+    assert {:ok, %UploadOld{key: key}} = Adapter.transfer(@upload)
     refute Adapter.get_uploads() == %{}
 
     assert :ok = Adapter.delete(key)

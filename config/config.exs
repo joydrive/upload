@@ -2,8 +2,8 @@
 # and its dependencies with the aid of the Mix.Config module.
 use Mix.Config
 
-config :upload, Upload, adapter: Upload.Adapters.Test
-config :upload, Upload.Adapters.S3, bucket: "my_bucket_name"
+config :upload, UploadOld, adapter: UploadOld.Adapters.Test
+config :upload, UploadOld.Adapters.S3, bucket: "my_bucket_name"
 
 # Configuration For AWS
 config :ex_aws,

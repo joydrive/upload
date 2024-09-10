@@ -1,10 +1,10 @@
-defmodule Upload.Adapters.Test do
-  use Upload.Adapter
+defmodule UploadOld.Adapters.Test do
+  use UploadOld.Adapter
 
-  alias Upload.Adapters.Test.Server
+  alias UploadOld.Adapters.Test.Server
 
   @moduledoc """
-  An `Upload.Adapter` that keeps track of uploaded files in memory, so that
+  An `UploadOld.Adapter` that keeps track of uploaded files in memory, so that
   you can make assertions.
 
   ### Setup
@@ -12,18 +12,18 @@ defmodule Upload.Adapters.Test do
   Add the following to `test_helper.exs`.
 
   ```elixir
-  Upload.Adapters.Test.start()
+  UploadOld.Adapters.Test.start()
   ```
 
   ### Example
 
-  Then you can use the Upload adapter in tests.
+  Then you can use the UploadOld adapter in tests.
 
   ```elixir
   test "files are uploaded" do
-    assert {:ok, upload} = Upload.cast_path("/path/to/file.txt")
-    assert {:ok, upload} = Upload.transfer(upload)
-    assert map_size(Upload.Adapters.Test.get_uploads()) == 1
+    assert {:ok, upload} = UploadOld.cast_path("/path/to/file.txt")
+    assert {:ok, upload} = UploadOld.transfer(upload)
+    assert map_size(UploadOld.Adapters.Test.get_uploads()) == 1
   end
   ```
   """
@@ -67,8 +67,8 @@ defmodule Upload.Adapters.Test do
   def get_signed_url(key, _opts), do: {:ok, get_url(key)}
 
   @impl true
-  def transfer(%Upload{} = upload) do
-    upload = %Upload{upload | status: :transferred}
+  def transfer(%UploadOld{} = upload) do
+    upload = %UploadOld{upload | status: :transferred}
     put_upload(upload)
     {:ok, upload}
   end

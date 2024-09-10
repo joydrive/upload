@@ -1,7 +1,7 @@
 if Code.ensure_loaded?(ExAws.S3) do
-  defmodule Upload.Adapters.S3 do
+  defmodule UploadOld.Adapters.S3 do
     @moduledoc """
-    An `Upload.Adapter` that stores files using Amazon S3.
+    An `UploadOld.Adapter` that stores files using Amazon S3.
 
     ### Requirements
 
@@ -13,22 +13,22 @@ if Code.ensure_loaded?(ExAws.S3) do
 
     ### Configuration
 
-        config :upload, Upload.Adapters.S3,
+        config :upload, UploadOld.Adapters.S3,
           bucket: "mybucket", # required
           base_url: "https://mybucket.s3.amazonaws.com" # optional
           virtual_host?: true # optional
 
     """
 
-    use Upload.Adapter
-    alias Upload.Config
+    use UploadOld.Adapter
+    alias UploadOld.Config
 
     @doc """
     The bucket that was configured.
 
     ## Examples
 
-        iex> Upload.Adapters.S3.bucket()
+        iex> UploadOld.Adapters.S3.bucket()
         "my_bucket_name"
 
     """
@@ -39,7 +39,7 @@ if Code.ensure_loaded?(ExAws.S3) do
 
     ## Examples
 
-        iex> Upload.Adapters.S3.base_url()
+        iex> UploadOld.Adapters.S3.base_url()
         "https://my_bucket_name.s3.amazonaws.com"
 
     """
@@ -66,10 +66,10 @@ if Code.ensure_loaded?(ExAws.S3) do
     end
 
     @impl true
-    def transfer(%Upload{key: key, path: path} = upload) do
+    def transfer(%UploadOld{key: key, path: path} = upload) do
       case put_object(key, path) do
         {:ok, _} ->
-          {:ok, %Upload{upload | status: :transferred}}
+          {:ok, %UploadOld{upload | status: :transferred}}
 
         _ ->
           {:error, "failed to transfer file"}

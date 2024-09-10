@@ -1,4 +1,4 @@
-defmodule Upload.Adapters.Test.Server do
+defmodule UploadOld.Adapters.Test.Server do
   @moduledoc false
   use GenServer
   @timeout 30000

@@ -1,4 +1,4 @@
-defmodule Upload.Config do
+defmodule UploadOld.Config do
   @moduledoc false
 
   @doc """
@@ -6,7 +6,7 @@ defmodule Upload.Config do
   """
   @spec get(atom, atom, any) :: any
   def get(mod, key, default) do
-    :upload
+    :upload_old
     |> Application.get_env(mod, [])
     |> Keyword.get(key, default)
     |> normalize_config()
@@ -17,7 +17,7 @@ defmodule Upload.Config do
   """
   @spec fetch!(atom, atom) :: any | no_return
   def fetch!(mod, key) do
-    :upload
+    :upload_old
     |> Application.get_env(mod, [])
     |> Keyword.fetch!(key)
     |> normalize_config()

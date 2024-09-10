@@ -1,12 +1,12 @@
-defmodule Upload.Adapters.S3Test do
+defmodule UploadOld.Adapters.S3Test do
   use ExUnit.Case, async: true
 
-  doctest Upload.Adapters.S3
+  doctest UploadOld.Adapters.S3
 
-  alias Upload.Adapters.S3, as: Adapter
+  alias UploadOld.Adapters.S3, as: Adapter
 
   @fixture Path.expand("../../fixtures/text.txt", __DIR__)
-  @upload %Upload{path: @fixture, filename: "text.txt", key: "foo/text.txt"}
+  @upload %UploadOld{path: @fixture, filename: "text.txt", key: "foo/text.txt"}
 
   defp ensure_bucket_exists! do
     with {:error, _} <- Adapter.bucket() |> ExAws.S3.head_bucket() |> ExAws.request() do
@@ -47,12 +47,12 @@ defmodule Upload.Adapters.S3Test do
   end
 
   test "transfer/1" do
-    assert {:ok, %Upload{key: key, status: :transferred}} = Adapter.transfer(@upload)
+    assert {:ok, %UploadOld{key: key, status: :transferred}} = Adapter.transfer(@upload)
     assert {:ok, %{body: "MEATLOAF\n"}} = get_object(key)
   end
 
   test "delete/1" do
-    assert {:ok, %Upload{key: key, status: :transferred}} = Adapter.transfer(@upload)
+    assert {:ok, %UploadOld{key: key, status: :transferred}} = Adapter.transfer(@upload)
     assert {:ok, %{body: "MEATLOAF\n"}} = get_object(key)
     assert :ok = Adapter.delete(key)
     assert {:error, _} = get_object(key)

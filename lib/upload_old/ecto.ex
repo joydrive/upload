@@ -1,5 +1,5 @@
 if Code.ensure_loaded?(Ecto) do
-  defmodule Upload.Ecto do
+  defmodule UploadOld.Ecto do
     @moduledoc """
     Allows Ecto to handle file uploads.
     """
@@ -57,7 +57,7 @@ if Code.ensure_loaded?(Ecto) do
 
     defp do_cast(action, changeset, field, opts) do
       value = Map.get(changeset.params, Atom.to_string(field))
-      {uploader, cast_opts} = Keyword.pop(opts, :with, Upload)
+      {uploader, cast_opts} = Keyword.pop(opts, :with, UploadOld)
 
       case apply(uploader, action, [value, cast_opts]) do
         {:ok, upload} ->
@@ -92,8 +92,8 @@ if Code.ensure_loaded?(Ecto) do
     @spec put_upload(Ecto.Changeset.t(), atom, Upload.t(), list) :: Ecto.Changeset.t()
     def put_upload(changeset, field, upload, opts \\ [])
 
-    def put_upload(changeset, field, %Upload{status: :pending, key: key} = upload, opts) do
-      uploader = Keyword.get(opts, :with, Upload)
+    def put_upload(changeset, field, %UploadOld{status: :pending, key: key} = upload, opts) do
+      uploader = Keyword.get(opts, :with, UploadOld)
 
       # We use `put_in` here as the URL may stay the same but we still want to
       # generate a change.
@@ -124,7 +124,7 @@ if Code.ensure_loaded?(Ecto) do
       end)
     end
 
-    def put_upload(changeset, field, %Upload{status: :transferred, key: key}, _opts) do
+    def put_upload(changeset, field, %UploadOld{status: :transferred, key: key}, _opts) do
       put_change(changeset, field, key)
     end
   end

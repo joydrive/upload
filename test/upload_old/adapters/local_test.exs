@@ -1,12 +1,12 @@
-defmodule Upload.Adapters.LocalTest do
+defmodule UploadOld.Adapters.LocalTest do
   use ExUnit.Case, async: true
 
-  doctest Upload.Adapters.Local
+  doctest UploadOld.Adapters.Local
 
-  alias Upload.Adapters.Local, as: Adapter
+  alias UploadOld.Adapters.Local, as: Adapter
 
   @fixture Path.expand("../../fixtures/text.txt", __DIR__)
-  @upload %Upload{path: @fixture, filename: "text.txt", key: "foo/text.txt"}
+  @upload %UploadOld{path: @fixture, filename: "text.txt", key: "foo/text.txt"}
 
   setup do
     {:ok, _} = File.rm_rf(Adapter.storage_path())
@@ -23,12 +23,12 @@ defmodule Upload.Adapters.LocalTest do
   end
 
   test "transfer/1" do
-    assert {:ok, %Upload{key: key, status: :transferred}} = Adapter.transfer(@upload)
+    assert {:ok, %UploadOld{key: key, status: :transferred}} = Adapter.transfer(@upload)
     assert File.exists?(Path.join(Adapter.storage_path(), key))
   end
 
   test "delete/1" do
-    assert {:ok, %Upload{key: key, status: :transferred}} = Adapter.transfer(@upload)
+    assert {:ok, %UploadOld{key: key, status: :transferred}} = Adapter.transfer(@upload)
     assert File.exists?(Path.join(Adapter.storage_path(), key))
     assert :ok = Adapter.delete(key)
     refute File.exists?(Path.join(Adapter.storage_path(), key))

@@ -1,9 +1,9 @@
-defmodule Upload.Mixfile do
+defmodule UploadOld.Mixfile do
   use Mix.Project
 
   def project do
     [
-      app: :upload,
+      app: :upload_old,
       package: package(),
       version: "0.0.0",
       elixir: "~> 1.8",
