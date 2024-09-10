@@ -12,6 +12,25 @@ defmodule Upload.MultiTest do
   @path "test/fixtures/image.jpg"
   @upload %Plug.Upload{path: @path, filename: "image.jpg"}
 
+  describe "handle_changes" do
+    test "can validate changes" do
+      changeset = Person.changeset(%Person{}, %{avatar: "test/fixtures/test.txt"})
+
+      {:error, _, changeset, _} =
+        Ecto.Multi.new()
+        |> Ecto.Multi.insert(:insert_person, changeset)
+        |> Upload.Multi.handle_changes(:upload_avatar, :insert_person, changeset, :avatar,
+          key_function: &key_function/1,
+          validate: fn changeset, field ->
+            Upload.Changeset.validate_attachment_type(changeset, field, allow: ["image/jpeg"])
+          end
+        )
+        |> Repo.transaction()
+
+      assert errors_on(changeset)[:avatar] == ["is not a supported file type"]
+    end
+  end
+
   test "upload/3" do
     assert {:ok, person} = insert_person(%{avatar: @upload})
     assert person.avatar_id
@@ -236,9 +255,7 @@ defmodule Upload.MultiTest do
     Ecto.Multi.new()
     |> Ecto.Multi.insert(:insert_person, changeset)
     |> Upload.Multi.handle_changes(:person, :insert_person, changeset, :avatar,
-      key_function: fn user ->
-        "uploads/users/#{user.id}/avatar"
-      end,
+      key_function: &key_function/1,
       canned_acl: :public
     )
     |> Repo.transaction()

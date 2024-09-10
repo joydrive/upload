@@ -83,14 +83,12 @@ defmodule Upload.Multi do
 
   ## Example
 
-  ```elixir
-  defp insert_person(changeset) do
-    Ecto.Multi.new()
-    |> Ecto.Multi.insert(:person, changeset)
-    |> Upload.Multi.handle_changes(:upload_avatar, :person, changeset, :avatar, key_function: &key_function/1)
-    |> Repo.transaction()
-  end
-  ```
+      defp insert_person(changeset) do
+        Ecto.Multi.new()
+        |> Ecto.Multi.insert(:person, changeset)
+        |> Upload.Multi.handle_changes(:upload_avatar, :person, changeset, :avatar, key_function: &key_function/1)
+        |> Repo.transaction()
+      end
 
   ## Options
 
@@ -99,6 +97,7 @@ defmodule Upload.Multi do
   """
   def handle_changes(multi, name, subject, changeset, field, opts \\ []) do
     key_function = key_function_from_opts(opts)
+    validate_function = validate_function_from_opts(opts)
 
     Multi.run(multi, name, fn repo, changes ->
       # This code is run after the record in inserted in the Multi pipeline.
@@ -120,6 +119,7 @@ defmodule Upload.Multi do
             key_function.(record)
           end
         )
+        |> validate_function.(field)
 
       record_changeset.changes
       |> Enum.reduce(Ecto.Multi.new(), fn {changed_field, change}, multi ->
@@ -130,9 +130,23 @@ defmodule Upload.Multi do
       |> repo.transaction()
       |> case do
         {:ok, result} -> {:ok, result["#{field}_attach_blob"]}
-        error -> error
+        {:error, _stage, changeset, _rest} -> {:error, changeset}
       end
     end)
+  end
+
+  defp validate_function_from_opts(opts) do
+    case Keyword.get(opts, :validate) do
+      nil ->
+        fn changeset, _field -> changeset end
+
+      validate_function when is_function(validate_function, 2) ->
+        validate_function
+
+      unexpected ->
+        raise ArgumentError,
+              "validate function must be a function of arity 2. Got #{inspect(unexpected)}"
+    end
   end
 
   defp key_function_from_opts(opts) do
