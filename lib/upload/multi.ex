@@ -268,7 +268,7 @@ defmodule Upload.Multi do
       when is_function(fun, 1) and is_function(transform_fn, 3) do
     repo = Upload.Config.repo()
 
-    Multi.run(multi, opts[:multi_name] || :create_variants, fn ctx ->
+    Multi.run(multi, opts[:multi_name] || :create_variants, fn _repo, ctx ->
       case fun.(ctx) do
         nil ->
           {:ok, nil}
@@ -322,7 +322,7 @@ defmodule Upload.Multi do
       when is_function(fun, 1) and is_function(transform_fn, 3) do
     repo = Upload.Config.repo()
 
-    Multi.run(multi, opts[:multi_name] || :create_variants, fn ctx ->
+    Multi.run(multi, opts[:multi_name] || :create_variants, fn _repo, ctx ->
       case fun.(ctx) do
         nil ->
           {:ok, nil}

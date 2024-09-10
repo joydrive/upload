@@ -24,8 +24,9 @@ defmodule Upload.Changeset do
   @type error :: binary | Ecto.Changeset.error()
   @type validation :: (any -> [error])
   @type size :: {number, :byte | :kilobyte | :megabyte | :gigabyte | :terabyte}
+  @type key_function :: (changeset -> String.t())
 
-  @type cast_opts :: [{:invalid_message, binary}]
+  @type cast_opts :: [{:invalid_message, binary} | {:key_function, key_function}]
   @type size_opts :: [{:less_than, size} | {:message, binary}]
   @type type_opts :: [{:allow, [binary]} | {:forbid, [binary]} | {:message, binary}]
 

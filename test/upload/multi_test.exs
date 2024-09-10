@@ -1,5 +1,6 @@
 defmodule Upload.MultiTest do
   use Upload.DataCase
+  use Upload.Testing
 
   alias Upload.Storage
   alias Upload.Test.Person
@@ -13,7 +14,7 @@ defmodule Upload.MultiTest do
   @upload %Plug.Upload{path: @path, filename: "image.jpg"}
 
   describe "handle_changes" do
-    test "can validate changes" do
+    test "will validate changes" do
       changeset = Person.changeset(%Person{}, %{avatar: "test/fixtures/test.txt"})
 
       {:error, _, changeset, _} =
@@ -28,6 +29,48 @@ defmodule Upload.MultiTest do
         |> Repo.transaction()
 
       assert errors_on(changeset)[:avatar] == ["is not a supported file type"]
+    end
+  end
+
+  describe "create_variant" do
+    test "will create a variant" do
+      changeset = Person.changeset(%Person{}, %{avatar: @upload})
+
+      {:ok, _} =
+        Ecto.Multi.new()
+        |> Ecto.Multi.insert(:person, changeset)
+        |> Upload.Multi.handle_changes(:upload_avatar, :person, changeset, :avatar,
+          key_function: &key_function/1
+        )
+        |> Upload.Multi.create_variant(
+          fn ctx -> ctx.upload_avatar.avatar end,
+          :small,
+          &small_transform/3
+        )
+        |> Repo.transaction()
+
+      person = Repo.one(Person) |> Repo.preload(avatar: :variants)
+
+      variant = List.first(person.avatar.variants)
+
+      assert variant.variant == "small"
+    end
+
+    test "handles when there are no changes" do
+      changeset = Person.changeset(%Person{}, %{})
+
+      {:ok, _} =
+        Ecto.Multi.new()
+        |> Ecto.Multi.insert(:person, changeset)
+        |> Upload.Multi.handle_changes(:upload_avatar, :person, changeset, :avatar,
+          key_function: &key_function/1
+        )
+        |> Upload.Multi.create_variant(
+          fn ctx -> ctx.upload_avatar.avatar end,
+          :small,
+          &small_transform/3
+        )
+        |> Repo.transaction()
     end
   end
 
