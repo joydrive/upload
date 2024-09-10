@@ -59,7 +59,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: priv/plts
-          key: plts-${{ matrix.elixir }}
+          key: plts
 
       - name: Dialyzer
         run: MIX_ENV=dev mix dialyzer
