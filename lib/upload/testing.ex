@@ -98,8 +98,8 @@ defmodule Upload.Testing do
 
   defmacro __using__(_) do
     quote do
-      alias Upload.Testing
       require Upload.Testing
+      import Upload.Testing
     end
   end
 end
