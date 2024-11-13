@@ -9,6 +9,8 @@ defmodule Upload.DataCase do
 
   using do
     quote do
+      use Upload.Testing
+
       import Upload.DataCase
       import Mock
     end
@@ -23,10 +25,6 @@ defmodule Upload.DataCase do
 
   def set_adapter(adapter) do
     Application.put_env(:upload, Upload.Storage, adapter: adapter, base_url: "http://example.com")
-  end
-
-  def list_uploaded_keys do
-    Enum.to_list(Upload.Storage.list!())
   end
 
   def errors_on(changeset) do

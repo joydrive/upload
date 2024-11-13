@@ -1,6 +1,5 @@
 defmodule Upload.MultiTest do
   use Upload.DataCase
-  use Upload.Testing
 
   alias Upload.Storage
   alias Upload.Test.Person
@@ -29,6 +28,18 @@ defmodule Upload.MultiTest do
         |> Repo.transaction()
 
       assert errors_on(changeset)[:avatar] == ["is not a supported file type"]
+    end
+
+    test "works when provided a changeset with nil changes" do
+      changeset = %{Person.changeset(%Person{}) | params: nil}
+
+      {:ok, _} =
+        Ecto.Multi.new()
+        |> Ecto.Multi.insert(:insert_person, changeset)
+        |> Upload.Multi.handle_changes(:upload_avatar, :insert_person, changeset, :avatar,
+          key_function: &key_function/1
+        )
+        |> Repo.transaction()
     end
   end
 

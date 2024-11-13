@@ -118,7 +118,7 @@ defmodule Upload.Multi do
 
       record_changeset =
         record
-        |> Ecto.Changeset.cast(%{field => Map.get(changeset.params, to_string(field))}, [])
+        |> Ecto.Changeset.cast(%{field => Map.get(changeset.params || %{}, to_string(field))}, [])
         |> Upload.Changeset.cast_attachment(field,
           key_function: fn _ ->
             key_function.(record)
