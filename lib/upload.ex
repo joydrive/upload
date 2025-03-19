@@ -153,7 +153,7 @@ defmodule Upload do
       transform_fn,
       opts
     )
-    |> repo.transaction()
+    |> repo.transaction(Keyword.get(opts, :transaction_opts))
     |> case do
       {:ok, multi_result} ->
         {:ok, Map.values(multi_result)}

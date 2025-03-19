@@ -7,7 +7,6 @@ defmodule Upload.Multi do
   alias Ecto.Association.NotLoaded
   alias Ecto.Multi
   alias Upload.Blob
-  alias Upload.Logger
   alias Upload.Storage
 
   @doc """
@@ -37,11 +36,19 @@ defmodule Upload.Multi do
   defp do_upload_blob(%Blob{path: nil} = blob, _opts), do: {:ok, blob}
 
   defp do_upload_blob(%Blob{path: path, key: key} = blob, opts) when is_binary(key) do
-    Upload.Logger.info("Uploading #{key}")
+    metadata = %{key: key, path: path}
 
-    with :ok <- Storage.upload(path, key),
-         :ok <- Upload.put_access_control_list(blob, opts[:canned_acl] || :private),
-         do: {:ok, blob}
+    :telemetry.span(
+      [:upload, :storage_upload],
+      metadata,
+      fn ->
+        {with(
+           :ok <- Storage.upload(path, key),
+           :ok <- Upload.put_access_control_list(blob, opts[:canned_acl] || :private),
+           do: {:ok, blob}
+         ), metadata}
+      end
+    )
   end
 
   @doc """
@@ -219,11 +226,21 @@ defmodule Upload.Multi do
   defp do_delete(nil), do: {:ok, nil}
 
   defp do_delete(%Blob{key: key} = blob) when is_binary(key) do
-    Logger.info("Removing blob #{blob.key}")
-
     with :ok <- remove_variants(blob),
-         :ok <- Storage.delete(key),
+         :ok <- storage_delete_with_telemetry(key),
          do: {:ok, blob}
+  end
+
+  defp storage_delete_with_telemetry(key) do
+    metadata = %{key: key}
+
+    :telemetry.span(
+      [:upload, :storage_delete],
+      metadata,
+      fn ->
+        {Storage.delete(key), metadata}
+      end
+    )
   end
 
   defp remove_variants(blob) do
@@ -231,8 +248,6 @@ defmodule Upload.Multi do
     blob = repo.preload(blob, :variants)
 
     Enum.each(blob.variants, fn variant ->
-      Logger.info("Removing variant #{variant.variant} for key #{blob.key}")
-
       {:ok, _blob_variant} = do_delete(variant)
     end)
 
@@ -373,7 +388,7 @@ defmodule Upload.Multi do
       with {:ok, blob_path} <- create_random_file(),
            :ok <- download_file(original_blob.key, blob_path),
            {:ok, variant_path} <-
-             call_transform_fn(transform_fn, blob_path, variant, format),
+             call_transform_fn(original_blob.key, transform_fn, blob_path, variant, format),
            :ok <- cleanup(blob_path),
            {:ok, blob} <- insert_variant(repo, original_blob, variant, variant_path),
            {:ok, _} <- do_upload_blob(blob, opts),
@@ -385,19 +400,28 @@ defmodule Upload.Multi do
     end)
   end
 
-  defp call_transform_fn(transform_fn, blob_path, variant, format) do
-    case :timer.tc(transform_fn, [blob_path, variant, format]) do
-      {microseconds, {:ok, path}} ->
-        Upload.Logger.info(
-          "Processed image variant '#{variant}' with format '#{format}' in #{microseconds / 1_000}ms"
-        )
+  defp call_transform_fn(original_blob_key, transform_fn, blob_path, variant, format) do
+    metadata = %{
+      original_blob_key: original_blob_key,
+      blob_path: blob_path,
+      variant: variant,
+      format: format
+    }
 
+    case :telemetry.span(
+           [:upload, :transform],
+           metadata,
+           fn ->
+             {transform_fn.(blob_path, variant, format), metadata}
+           end
+         ) do
+      {:ok, path} ->
         {:ok, path}
 
-      {_time, {:error, error}} ->
+      {:error, error} ->
         {:error, error}
 
-      {_time, unexpected} ->
+      unexpected ->
         raise "Expected upload transform function to return {:ok, path} or {:error, error}, got: #{inspect(unexpected)}"
     end
   end
@@ -448,9 +472,23 @@ defmodule Upload.Multi do
   end
 
   defp download_file(key, path) do
-    case Upload.Storage.download(key, path) do
-      :ok -> :ok
-      {:error, reason} -> {:error, %Upload.DownloadError{reason: reason, key: key, path: path}}
-    end
+    metadata = %{key: key, path: path}
+
+    :telemetry.span(
+      [:upload, :storage_download],
+      metadata,
+      fn ->
+        result =
+          case Upload.Storage.download(key, path) do
+            :ok ->
+              :ok
+
+            {:error, reason} ->
+              {:error, %Upload.DownloadError{reason: reason, key: key, path: path}}
+          end
+
+        {result, metadata}
+      end
+    )
   end
 end

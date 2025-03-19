@@ -57,6 +57,9 @@ defmodule Upload.Mixfile do
       {:postgrex, ">= 0.0.0"},
       {:sweet_xml, ">= 0.0.0"},
       {:mime, "~> 2.0"},
+      {:telemetry, "~> 1.0"},
+      {:opentelemetry_api, "~> 1.4"},
+      {:opentelemetry_telemetry, "~> 1.1.2"},
 
       # Test dependencies for this package
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
