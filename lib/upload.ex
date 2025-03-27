@@ -88,16 +88,18 @@ defmodule Upload do
 
   ## Example
 
-      iex> Upload.get_variant(person.avatar, :small)
+      iex> Upload.get_variant(person.avatar, :small, "image/jpeg")
       %Blob{}
 
   """
-  @spec get_variant(Blob.t(), variant_id()) :: nil | Blob.t()
-  def get_variant(%Blob{id: blob_id}, variant) do
+  @spec get_variant(Blob.t(), variant_id(), String.t()) :: nil | Blob.t()
+  def get_variant(%Blob{id: blob_id}, variant, format) do
     repo = Upload.Config.repo()
 
     Blob
-    |> where([blob], blob.original_blob_id == ^blob_id and blob.variant == ^to_string(variant))
+    |> where([blob], blob.original_blob_id == ^blob_id)
+    |> where([blob], blob.variant == ^to_string(variant))
+    |> where([blob], blob.content_type == ^to_string(format))
     |> repo.one()
   end
 
@@ -153,7 +155,7 @@ defmodule Upload do
       transform_fn,
       opts
     )
-    |> repo.transaction(Keyword.get(opts, :transaction_opts))
+    |> repo.transaction(Keyword.get(opts, :transaction_opts, []))
     |> case do
       {:ok, multi_result} ->
         {:ok, Map.values(multi_result)}
