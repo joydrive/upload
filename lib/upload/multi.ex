@@ -254,19 +254,19 @@ defmodule Upload.Multi do
     :ok
   end
 
-  defp remove_existing_variants(multi, original_blob, variant, formats) do
+  def remove_variants(multi, original_blob, variant, formats) do
     Enum.reduce(formats, multi, fn format, multi ->
-      remove_existing_variant(multi, original_blob, variant, format)
+      remove_variant(multi, original_blob, variant, format)
     end)
   end
 
-  defp remove_existing_variant(multi, original_blob, variant, format) do
+  def remove_variant(multi, original_blob, variant, format) do
     case Upload.get_variant(original_blob, variant, format) do
       nil ->
         multi
 
       existing_variant_blob ->
-        delete_blob(multi, :"remove_existing_variant_#{format}", existing_variant_blob)
+        delete_blob(multi, "remove_variant_#{variant}_#{format}", existing_variant_blob)
     end
   end
 
@@ -311,7 +311,7 @@ defmodule Upload.Multi do
     variant = to_string(variant)
     formats = Keyword.get(opts, :formats, [:"image/jpeg"])
 
-    multi = remove_existing_variants(multi, original_blob, variant, formats)
+    multi = remove_variants(multi, original_blob, variant, formats)
 
     Enum.reduce(formats, multi, fn format, multi ->
       download_and_insert_variant(
@@ -367,7 +367,7 @@ defmodule Upload.Multi do
     formats = Keyword.get(opts, :formats, [:"image/jpeg"])
 
     Enum.reduce(variants, multi, fn variant, multi ->
-      multi = remove_existing_variants(multi, original_blob, variant, formats)
+      multi = remove_variants(multi, original_blob, variant, formats)
 
       Enum.reduce(formats, multi, fn format, multi ->
         download_and_insert_variant(
