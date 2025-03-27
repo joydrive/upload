@@ -266,7 +266,7 @@ defmodule Upload.Multi do
         multi
 
       existing_variant_blob ->
-        delete_blob(multi, :remove_existing_variant, existing_variant_blob)
+        delete_blob(multi, :"remove_existing_variant_#{format}", existing_variant_blob)
     end
   end
 

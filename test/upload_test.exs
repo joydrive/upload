@@ -22,6 +22,20 @@ defmodule UploadTest do
       assert blob_variant.key in list_uploaded_keys()
     end
 
+    test "works when called twice / handles the existing database items" do
+      assert {:ok, person} = insert_person(%{avatar: @upload})
+      assert person.avatar
+
+      {:ok, [_blob_variant]} =
+        Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+
+      {:ok, [blob_variant]} =
+        Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+
+      assert blob_variant.key == "uploads/users/123/avatar/small.avif"
+      assert blob_variant.key in list_uploaded_keys()
+    end
+
     test "replacing a single variant of an upload deletes the old one" do
       assert {:ok, person} = insert_person(%{avatar: @upload})
       assert person.avatar
@@ -54,6 +68,45 @@ defmodule UploadTest do
     test "create a single variant of an upload" do
       assert {:ok, person} = insert_person(%{avatar: @upload})
       assert person.avatar
+
+      {:ok, [small_variant, small_avif_variant]} =
+        Upload.create_variants(
+          person.avatar,
+          [
+            "small"
+          ],
+          &transform_image/3,
+          formats: [:"image/jpeg", :"image/avif"]
+        )
+
+      assert small_variant.key in [
+               "uploads/users/123/avatar/small.jpg",
+               "uploads/users/123/avatar/small.avif"
+             ]
+
+      assert small_variant.key in list_uploaded_keys()
+
+      assert small_variant.key in [
+               "uploads/users/123/avatar/small.jpg",
+               "uploads/users/123/avatar/small.avif"
+             ]
+
+      assert small_avif_variant.key in list_uploaded_keys()
+    end
+
+    test "works when called twice / handles the existing database items" do
+      assert {:ok, person} = insert_person(%{avatar: @upload})
+      assert person.avatar
+
+      {:ok, [_small_variant, _small_avif_variant]} =
+        Upload.create_variants(
+          person.avatar,
+          [
+            "small"
+          ],
+          &transform_image/3,
+          formats: [:"image/jpeg", :"image/avif"]
+        )
 
       {:ok, [small_variant, small_avif_variant]} =
         Upload.create_variants(

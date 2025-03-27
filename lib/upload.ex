@@ -127,8 +127,11 @@ defmodule Upload do
     |> Upload.Multi.create_variant(original_blob, variant, transform_fn, opts)
     |> repo.transaction()
     |> case do
-      {:ok, multi_result} -> {:ok, Map.values(multi_result)}
-      {:error, error} -> {:error, error}
+      {:ok, multi_result} ->
+        {:ok, extract_inserts(multi_result)}
+
+      {:error, error} ->
+        {:error, error}
     end
   end
 
@@ -158,11 +161,19 @@ defmodule Upload do
     |> repo.transaction(Keyword.get(opts, :transaction_opts, []))
     |> case do
       {:ok, multi_result} ->
-        {:ok, Map.values(multi_result)}
+        {:ok, extract_inserts(multi_result)}
 
       {:error, stage, error, _} ->
         {:error, stage, error}
     end
+  end
+
+  defp extract_inserts(multi_result) do
+    multi_result
+    |> Enum.filter(fn {key, _} ->
+      String.starts_with?(to_string(key), "download_and_insert")
+    end)
+    |> Enum.map(fn {_, value} -> value end)
   end
 
   @doc """
