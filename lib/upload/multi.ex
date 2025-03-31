@@ -226,9 +226,13 @@ defmodule Upload.Multi do
   defp do_delete(nil), do: {:ok, nil}
 
   defp do_delete(%Blob{key: key} = blob) when is_binary(key) do
+    repo = Upload.Config.repo()
+
     with :ok <- remove_variants(blob),
          :ok <- storage_delete_with_telemetry(key),
-         do: {:ok, blob}
+         {:ok, blob} <- repo.delete(blob) do
+      {:ok, blob}
+    end
   end
 
   defp storage_delete_with_telemetry(key) do

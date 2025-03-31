@@ -125,12 +125,12 @@ defmodule Upload do
 
     Ecto.Multi.new()
     |> Upload.Multi.create_variant(original_blob, variant, transform_fn, opts)
-    |> repo.transaction()
+    |> repo.transaction(Keyword.get(opts, :transaction_opts, []))
     |> case do
       {:ok, multi_result} ->
         {:ok, extract_inserts(multi_result)}
 
-      {:error, error} ->
+      {:error, _stage, error, _context} ->
         {:error, error}
     end
   end

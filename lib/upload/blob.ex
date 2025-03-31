@@ -63,6 +63,10 @@ defmodule Upload.Blob do
     |> add_extension_from_mime()
     |> foreign_key_constraint(:original_blob_id)
     |> validate_original_blob_id_is_not_variant()
+    |> unique_constraint(:key)
+    |> unique_constraint(:variant,
+      name: :blobs_variant_content_type_original_blob_id_index
+    )
     |> check_constraint(:variant, name: :variant_and_original_blob_id_are_only_nullable_together)
   end
 

@@ -77,6 +77,7 @@ defmodule Upload.BlobTest do
           %Blob{},
           @attributes
           |> Map.merge(%{
+            key: "xyz",
             variant: "foo",
             original_blob_id: blob.id
           })

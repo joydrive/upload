@@ -41,10 +41,13 @@ defmodule Upload.Migrations do
       )
     )
 
-    unique_index(:blobs, :key)
+    create(unique_index(:blobs, :key))
 
-    unique_index(:blobs, [:variant, :original_blob_id],
-      comment: "There can only be one variant per blob with the same variant name."
+    create(
+      unique_index(:blobs, [:variant, :content_type, :original_blob_id],
+        name: :blobs_variant_content_type_original_blob_id_index,
+        comment: "There can only be one variant per blob with the same variant name."
+      )
     )
   end
 

@@ -16,7 +16,9 @@ defmodule UploadTest do
       assert person.avatar
 
       {:ok, [blob_variant]} =
-        Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+        Upload.create_variant(person.avatar, "small", &small_transform_avif/3,
+          formats: [:"image/avif"]
+        )
 
       assert blob_variant.key == "uploads/users/123/avatar/small.avif"
       assert blob_variant.key in list_uploaded_keys()
@@ -27,10 +29,16 @@ defmodule UploadTest do
       assert person.avatar
 
       {:ok, [_blob_variant]} =
-        Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+        Upload.create_variant(person.avatar, "small", &small_transform_avif/3,
+          formats: [:"image/avif"]
+        )
+
+      person = Repo.reload(person) |> Repo.preload(:avatar)
 
       {:ok, [blob_variant]} =
-        Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+        Upload.create_variant(person.avatar, "small", &small_transform_avif/3,
+          formats: [:"image/avif"]
+        )
 
       assert blob_variant.key == "uploads/users/123/avatar/small.avif"
       assert blob_variant.key in list_uploaded_keys()
@@ -41,12 +49,16 @@ defmodule UploadTest do
       assert person.avatar
 
       {:ok, [blob_variant1]} =
-        Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+        Upload.create_variant(person.avatar, "small", &small_transform_avif/3,
+          formats: [:"image/avif"]
+        )
 
       assert blob_variant1.key in list_uploaded_keys()
 
       {:ok, [blob_variant2 | _]} =
-        Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+        Upload.create_variant(person.avatar, "small", &small_transform_avif/3,
+          formats: [:"image/avif"]
+        )
 
       assert blob_variant2.key in list_uploaded_keys()
     end
@@ -58,7 +70,10 @@ defmodule UploadTest do
 
       refute Upload.variant_exists?(person.avatar, "small")
 
-      {:ok, _} = Upload.create_variant(person.avatar, "small", &small_transform_avif/3)
+      {:ok, _} =
+        Upload.create_variant(person.avatar, "small", &small_transform_avif/3,
+          formats: [:"image/avif"]
+        )
 
       assert Upload.variant_exists?(person.avatar, "small")
     end
