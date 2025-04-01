@@ -229,9 +229,8 @@ defmodule Upload.Multi do
     repo = Upload.Config.repo()
 
     with :ok <- remove_variants(blob),
-         :ok <- storage_delete_with_telemetry(key),
-         {:ok, blob} <- repo.delete(blob) do
-      {:ok, blob}
+         :ok <- storage_delete_with_telemetry(key) do
+      repo.delete(blob)
     end
   end
 

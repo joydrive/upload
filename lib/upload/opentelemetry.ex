@@ -1,4 +1,7 @@
 defmodule Upload.OpenTelemetry do
+  @moduledoc """
+  Creates OpenTelemetry spans based on telemetry events.
+  """
   require Logger
 
   @tracer_id __MODULE__
