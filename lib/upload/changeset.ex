@@ -1,6 +1,10 @@
 defmodule Upload.Changeset do
   @moduledoc """
-  Functions for use with changesets to upload and validate attachments.
+  Functions for use with changesets to cast and validate attachments.
+
+  These functions will not perform an upload of the `Upload.Blob` as they only
+  create and validate the database record. For synchronizing uploads remotely
+  see `Upload.Multi.handle_changes/6`
 
   ```elixir
   schema "people" do
@@ -13,7 +17,6 @@ defmodule Upload.Changeset do
   |> validate_attachment_type(:avatar, allow: ["image/png"])
   ```
   """
-
   import Ecto.Changeset
 
   @type changeset :: Ecto.Changeset.t()
@@ -21,8 +24,9 @@ defmodule Upload.Changeset do
   @type error :: binary | Ecto.Changeset.error()
   @type validation :: (any -> [error])
   @type size :: {number, :byte | :kilobyte | :megabyte | :gigabyte | :terabyte}
+  @type key_function :: (changeset -> String.t())
 
-  @type cast_opts :: [{:invalid_message, binary}]
+  @type cast_opts :: [{:invalid_message, binary} | {:key_function, key_function}]
   @type size_opts :: [{:less_than, size} | {:message, binary}]
   @type type_opts :: [{:allow, [binary]} | {:forbid, [binary]} | {:message, binary}]
 
@@ -68,16 +72,22 @@ defmodule Upload.Changeset do
   """
   @spec cast_attachment(changeset(), field(), cast_opts()) :: changeset()
   def cast_attachment(changeset, field, opts \\ []) do
-    key =
-      case Keyword.get(opts, :key_function) do
-        nil -> nil
-        key_function when is_function(key_function, 1) -> key_function.(changeset)
-        _ -> raise ArgumentError, "key_function must be a function of arity 1."
-      end
+    key_function = key_function_from_opts(opts)
 
     case Map.fetch(changeset.params, to_string(field)) do
       {:ok, %Plug.Upload{} = upload} ->
-        put_attachment(changeset, field, upload, key)
+        put_attachment(changeset, field, upload, key_function.(changeset))
+
+      {:ok, path} when is_binary(path) ->
+        case Upload.stat(path) do
+          {:error, _error} ->
+            message = Keyword.get(opts, :invalid_message, "is invalid")
+            meta = [validation: :assoc, type: :map]
+            add_error(changeset, field, message, meta)
+
+          {:ok, stat} ->
+            put_attachment(changeset, field, stat, key_function.(changeset))
+        end
 
       {:ok, nil} ->
         if Keyword.get(opts, :required, false) do
@@ -85,7 +95,6 @@ defmodule Upload.Changeset do
           meta = [validation: :required]
           add_error(changeset, field, message, meta)
         else
-          # delete here?
           put_assoc(changeset, field, nil)
         end
 
@@ -96,6 +105,20 @@ defmodule Upload.Changeset do
 
       :error ->
         changeset
+    end
+  end
+
+  defp key_function_from_opts(opts) do
+    case Keyword.get(opts, :key_function) do
+      nil ->
+        nil
+
+      key_function when is_function(key_function, 1) ->
+        key_function
+
+      unexpected ->
+        raise ArgumentError,
+              "key_function must be a function of arity 1. Got #{inspect(unexpected)}"
     end
   end
 

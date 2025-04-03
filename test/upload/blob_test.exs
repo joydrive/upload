@@ -38,13 +38,25 @@ defmodule Upload.BlobTest do
     assert blob.changes.key == "abcdef.txt"
   end
 
+  test "allows the avif MIME type" do
+    changeset = Blob.changeset(%Blob{}, @attributes |> Map.put(:content_type, "image/avif"))
+
+    assert changeset.valid?
+  end
+
+  test "allows the webp MIME type" do
+    changeset = Blob.changeset(%Blob{}, @attributes |> Map.put(:content_type, "image/webp"))
+
+    assert changeset.valid?
+  end
+
   test "returns an error when the file extension can not be determined from the MIME type" do
     changeset = Blob.changeset(%Blob{}, @attributes |> Map.put(:content_type, "not-a-real-mime"))
 
     refute changeset.valid?
 
     assert errors_on(changeset) == %{
-             key: ["Could not set extension from MIME type: 'not-a-real-mime'"]
+             key: ["Could not set the extension from the given MIME type: 'not-a-real-mime'"]
            }
   end
 
@@ -65,6 +77,7 @@ defmodule Upload.BlobTest do
           %Blob{},
           @attributes
           |> Map.merge(%{
+            key: "xyz",
             variant: "foo",
             original_blob_id: blob.id
           })

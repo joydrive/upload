@@ -22,23 +22,33 @@ defmodule Upload.Stat do
   @doc false
   @spec stat(Path.t()) :: {:ok, t()} | {:error, error()}
   def stat(path) do
-    with {:ok, byte_size} <- get_byte_size(path),
-         {:ok, checksum} <- compute_checksum(path),
-         {:ok, detected_type} <- detect_type(path),
-         {:ok, metadata} <- analyze(path, detected_type) do
-      content_type = get_content_type(path, detected_type)
+    metadata = %{path: path}
 
-      stat = %__MODULE__{
-        path: path,
-        byte_size: byte_size,
-        checksum: checksum,
-        metadata: metadata,
-        content_type: content_type,
-        filename: Path.basename(path)
-      }
+    :telemetry.span(
+      [:upload, :stat],
+      metadata,
+      fn ->
+        with {:ok, byte_size} <- get_byte_size(path),
+             {:ok, checksum} <- compute_checksum(path),
+             {:ok, detected_type} <- detect_type(path),
+             {:ok, metadata} <- analyze(path, detected_type) do
+          content_type = get_content_type(path, detected_type)
 
-      {:ok, stat}
-    end
+          stat = %__MODULE__{
+            path: path,
+            byte_size: byte_size,
+            checksum: checksum,
+            metadata: metadata,
+            content_type: content_type,
+            filename: Path.basename(path)
+          }
+
+          {{:ok, stat}, Map.put(metadata, :stat, stat)}
+        else
+          {:error, error} -> {{:error, error}, metadata}
+        end
+      end
+    )
   end
 
   @doc false
@@ -97,11 +107,23 @@ defmodule Upload.Stat do
     analyzers = Upload.Config.analyzers()
 
     Enum.find_value(analyzers, {:ok, nil}, fn analyzer ->
-      case analyzer.stat(path, content_type) do
+      case run_analyzer_with_telemetry(analyzer, path, content_type) do
         {:ok, nil} -> nil
         {:ok, metadata} -> {:ok, metadata}
         {:error, reason} when is_struct(reason) -> {:error, reason}
       end
     end)
+  end
+
+  defp run_analyzer_with_telemetry(analyzer, path, content_type) do
+    metadata = %{analyzer: analyzer, path: path, content_type: content_type}
+
+    :telemetry.span(
+      [:upload, :analyze],
+      metadata,
+      fn ->
+        {analyzer.stat(path, content_type), metadata}
+      end
+    )
   end
 end

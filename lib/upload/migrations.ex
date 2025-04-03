@@ -25,7 +25,10 @@ defmodule Upload.Migrations do
       add(:checksum, :string, null: false)
 
       add(:variant, :string)
-      add(:original_blob_id, references(:blobs, type: :binary_id), type: :binary_id)
+
+      add(:original_blob_id, references(:blobs, type: :binary_id, on_delete: :delete_all),
+        type: :binary_id
+      )
 
       timestamps(updated_at: false)
     end
@@ -38,10 +41,13 @@ defmodule Upload.Migrations do
       )
     )
 
-    unique_index(:blobs, :key)
+    create(unique_index(:blobs, :key))
 
-    unique_index(:blobs, [:variant, :original_blob_id],
-      comment: "There can only be one variant per blob with the same variant name."
+    create(
+      unique_index(:blobs, [:variant, :content_type, :original_blob_id],
+        name: :blobs_variant_content_type_original_blob_id_index,
+        comment: "There can only be one variant per blob with the same variant name."
+      )
     )
   end
 

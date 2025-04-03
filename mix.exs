@@ -56,14 +56,18 @@ defmodule Upload.Mixfile do
       {:plug, "~> 1.13"},
       {:postgrex, ">= 0.0.0"},
       {:sweet_xml, ">= 0.0.0"},
-      {:mock, "~> 0.3"},
+      {:mime, "~> 2.0"},
+      {:telemetry, "~> 1.0"},
+      {:opentelemetry_api, "~> 1.4"},
+      {:opentelemetry_telemetry, "~> 1.1.2"},
 
       # Test dependencies for this package
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:excoveralls, "~> 0.18", only: :test},
-      {:mix_test_watch, "~> 1.0", only: :dev, runtime: false}
+      {:mix_test_watch, "~> 1.0", only: :dev, runtime: false},
+      {:mock, "~> 0.3", only: :test}
     ]
   end
 end

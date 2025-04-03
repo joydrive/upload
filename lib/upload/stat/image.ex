@@ -4,7 +4,7 @@ defmodule Upload.Stat.Image do
 
   @impl true
   def stat(path, "image/" <> _), do: stat(path)
-  def stat(_path, _content_type), do: {:ok, nil}
+  def stat(_path, _content_type), do: {:ok, %{}}
 
   @doc false
   def stat(path) do
@@ -17,7 +17,7 @@ defmodule Upload.Stat.Image do
          }}
 
       {:error, _} ->
-        {:ok, nil}
+        {:ok, %{}}
     end
   end
 end

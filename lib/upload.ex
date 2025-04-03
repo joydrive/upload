@@ -57,22 +57,49 @@ defmodule Upload do
     |> repo.exists?()
   end
 
+  @spec delete(Blob.t()) :: :ok | {:error, any()}
+  def delete(blob) do
+    repo = Upload.Config.repo()
+
+    case Ecto.Multi.new()
+         |> Upload.Multi.delete_blob(:remove_existing_blob, blob)
+         |> repo.transaction() do
+      {:ok, _} -> :ok
+      error -> error
+    end
+  end
+
+  @spec delete_by_key(String.t()) :: :ok | {:error, any()}
+  def delete_by_key(key) do
+    repo = Upload.Config.repo()
+
+    case repo.get_by(Upload.Blob, key: key) do
+      nil ->
+        :ok
+
+      blob ->
+        delete(blob)
+    end
+  end
+
   @doc """
   Returns the variant for a given `Upload.Blob` and the variant identifier or `nil` if it
   does not exist.
 
   ## Example
 
-      iex> Upload.get_variant(person.avatar, :small)
+      iex> Upload.get_variant(person.avatar, :small, "image/jpeg")
       %Blob{}
 
   """
-  @spec get_variant(Blob.t(), variant_id()) :: nil | Blob.t()
-  def get_variant(%Blob{id: blob_id}, variant) do
+  @spec get_variant(Blob.t(), variant_id(), String.t()) :: nil | Blob.t()
+  def get_variant(%Blob{id: blob_id}, variant, format) do
     repo = Upload.Config.repo()
 
     Blob
-    |> where([blob], blob.original_blob_id == ^blob_id and blob.variant == ^to_string(variant))
+    |> where([blob], blob.original_blob_id == ^blob_id)
+    |> where([blob], blob.variant == ^to_string(variant))
+    |> where([blob], blob.content_type == ^to_string(format))
     |> repo.one()
   end
 
@@ -81,25 +108,30 @@ defmodule Upload do
 
   Calling this multiple times is not the optimal for creating multiple variants
   of a blob at once since this function would download the original blob once
-  per variant. See `create_multiple_variants/3`.
+  per variant. See `create_variants/3` for a more optimal solution.
+
+  If a transaction is needed, see `Upload.Multi.create_variant/5`.
 
   ## Example
 
       iex> create_variant(original_blob, :small, &transform_fn/3)
       {:ok, %Blob{}}
   """
-  @spec create_variant(Blob.t(), String.t(), any()) :: {:ok, Blob.t()} | {:error, any()}
-  def create_variant(original_blob, variant, transform_fn) when is_function(transform_fn, 3) do
+  @spec create_variant(Blob.t(), String.t(), any(), keyword()) ::
+          {:ok, Blob.t()} | {:error, any()}
+  def create_variant(original_blob, variant, transform_fn, opts \\ [])
+      when is_function(transform_fn, 3) do
     repo = Upload.Config.repo()
-    variant = to_string(variant)
 
     Ecto.Multi.new()
-    |> Upload.Multi.remove_existing_variant(original_blob, variant)
-    |> Upload.Multi.download_and_insert_variant(original_blob, variant, transform_fn)
-    |> repo.transaction()
+    |> Upload.Multi.create_variant(original_blob, variant, transform_fn, opts)
+    |> repo.transaction(Keyword.get(opts, :transaction_opts, []))
     |> case do
-      {:ok, multi_result} -> {:ok, Map.fetch!(multi_result, "download_and_insert_#{variant}")}
-      {:error, error} -> {:error, error}
+      {:ok, multi_result} ->
+        {:ok, extract_inserts(multi_result)}
+
+      {:error, _stage, error, _context} ->
+        {:error, error}
     end
   end
 
@@ -109,31 +141,39 @@ defmodule Upload do
 
   ## Example
 
-      iex> create_multiple_variants(blob, [:small, :large], &transform_fn/3)
+      iex> create_variants(blob, [:small, :large], &transform_fn/2)
       {:ok, [%Blob{...}, %Blob{...}]}
   """
-  @spec create_multiple_variants(Blob.t(), [variant_id()], any()) ::
+  @spec create_variants(Blob.t(), [variant_id()], any()) ::
           {:ok, [Blob.t()]} | {:error, String.t(), any()}
-  def create_multiple_variants(original_blob, variants, transform_fn)
+  def create_variants(original_blob, variants, transform_fn, opts \\ [])
       when is_function(transform_fn, 3) do
     variants = Enum.map(variants, &to_string/1)
     repo = Upload.Config.repo()
-    multi = Ecto.Multi.new()
 
-    variants
-    |> Enum.reduce(multi, fn variant, multi ->
-      multi
-      |> Upload.Multi.remove_existing_variant(original_blob, variant)
-      |> Upload.Multi.download_and_insert_variant(original_blob, variant, transform_fn)
-    end)
-    |> repo.transaction()
+    Ecto.Multi.new()
+    |> Upload.Multi.create_variants(
+      original_blob,
+      variants,
+      transform_fn,
+      opts
+    )
+    |> repo.transaction(Keyword.get(opts, :transaction_opts, []))
     |> case do
       {:ok, multi_result} ->
-        {:ok, Map.values(multi_result)}
+        {:ok, extract_inserts(multi_result)}
 
       {:error, stage, error, _} ->
         {:error, stage, error}
     end
+  end
+
+  defp extract_inserts(multi_result) do
+    multi_result
+    |> Enum.filter(fn {key, _} ->
+      String.starts_with?(to_string(key), "download_and_insert")
+    end)
+    |> Enum.map(fn {_, value} -> value end)
   end
 
   @doc """

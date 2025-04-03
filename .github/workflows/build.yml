@@ -4,19 +4,12 @@ on: [push]
 
 jobs:
   build:
-    name: Elixir ${{matrix.elixir}} - OTP ${{matrix.otp}}
+    name: Elixir
     runs-on: ubuntu-latest
 
     env:
       MIX_ENV: test
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    strategy:
-      matrix:
-        elixir:
-          - "1.16.1"
-        otp:
-          - "26.2.2"
 
     services:
       fake-s3:
@@ -39,13 +32,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Setup Elixir
         uses: erlef/setup-beam@v1
         with:
-          otp-version: ${{matrix.otp}}
-          elixir-version: ${{matrix.elixir}}
+          version-file: .tool-versions
+          version-type: strict
 
       - name: Dependencies
         run: mix deps.get
@@ -63,10 +56,10 @@ jobs:
         run: mix test
 
       - name: Cache dialyzer
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: priv/plts
-          key: plts-${{ matrix.elixir }}
+          key: plts
 
       - name: Dialyzer
         run: MIX_ENV=dev mix dialyzer

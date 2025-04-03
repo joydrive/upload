@@ -63,9 +63,11 @@ defmodule Upload.Blob do
     |> add_extension_from_mime()
     |> foreign_key_constraint(:original_blob_id)
     |> validate_original_blob_id_is_not_variant()
+    |> unique_constraint(:key)
+    |> unique_constraint(:variant,
+      name: :blobs_variant_content_type_original_blob_id_index
+    )
     |> check_constraint(:variant, name: :variant_and_original_blob_id_are_only_nullable_together)
-    |> maybe_upload()
-    |> maybe_delete()
   end
 
   defp generate_id(changeset) do
@@ -84,7 +86,11 @@ defmodule Upload.Blob do
         key <> "." <> extension
       end)
     else
-      add_error(changeset, :key, "Could not set extension from MIME type: '#{mime}'")
+      add_error(
+        changeset,
+        :key,
+        "Could not set the extension from the given MIME type: '#{mime}'"
+      )
     end
   end
 
@@ -96,31 +102,6 @@ defmodule Upload.Blob do
       %__MODULE__{},
       Map.from_struct(stat) |> Map.put(:key, key)
     )
-  end
-
-  defp maybe_upload(changeset) do
-    prepare_changes(changeset, fn changeset ->
-      if changeset.action == :insert do
-        %{path: path, key: key} = changeset.changes
-
-        :ok = Upload.Storage.upload(path, key)
-      end
-
-      changeset
-    end)
-  end
-
-  defp maybe_delete(changeset) do
-    prepare_changes(changeset, fn changeset ->
-      if changeset.action == :delete do
-        {:ok, _} =
-          Ecto.Multi.new()
-          |> Upload.Multi.purge(:blob, changeset.data)
-          |> Upload.Config.repo().transaction()
-      end
-
-      changeset
-    end)
   end
 
   defp validate_original_blob_id_is_not_variant(changeset) do
