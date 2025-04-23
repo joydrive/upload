@@ -123,26 +123,32 @@ defmodule Upload.Multi do
 
       record = repo.preload(record, [field])
 
-      record_changeset =
-        record
-        |> Ecto.Changeset.cast(%{field => Map.get(changeset.params || %{}, to_string(field))}, [])
-        |> Upload.Changeset.cast_attachment(field,
-          key_function: fn _ ->
-            key_function.(record)
-          end
-        )
-        |> validate_function.(field)
+      case Map.get(changeset.params || %{}, to_string(field), :no_change) do
+        :no_change ->
+          {:ok, record}
 
-      record_changeset.changes
-      |> Enum.reduce(Ecto.Multi.new(), fn {changed_field, change}, multi ->
-        # Deletes if the change is 'nil', uploads otherwise.
-        handle_change({changed_field, change}, multi, changeset, opts)
-      end)
-      |> Multi.update("#{field}_attach_blob", record_changeset)
-      |> repo.transaction()
-      |> case do
-        {:ok, result} -> {:ok, result["#{field}_attach_blob"]}
-        {:error, _stage, changeset, _rest} -> {:error, changeset}
+        new_value ->
+          record_changeset =
+            record
+            |> Ecto.Changeset.cast(%{field => new_value}, [])
+            |> Upload.Changeset.cast_attachment(field,
+              key_function: fn _ ->
+                key_function.(record)
+              end
+            )
+            |> validate_function.(field)
+
+          record_changeset.changes
+          |> Enum.reduce(Ecto.Multi.new(), fn {changed_field, change}, multi ->
+            # Deletes if the change is 'nil', uploads otherwise.
+            handle_change({changed_field, change}, multi, changeset, opts)
+          end)
+          |> Multi.update("#{field}_attach_blob", record_changeset)
+          |> repo.transaction()
+          |> case do
+            {:ok, result} -> {:ok, result["#{field}_attach_blob"]}
+            {:error, _stage, changeset, _rest} -> {:error, changeset}
+          end
       end
     end)
   end

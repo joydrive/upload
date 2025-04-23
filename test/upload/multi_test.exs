@@ -41,6 +41,39 @@ defmodule Upload.MultiTest do
         )
         |> Repo.transaction()
     end
+
+    test "does nothing when provided a changeset with empty changes for a record with an existing upload" do
+      changeset = Person.changeset(%Person{}, %{avatar: @upload})
+
+      {:ok, _} =
+        Ecto.Multi.new()
+        |> Ecto.Multi.insert(:person, changeset)
+        |> Upload.Multi.handle_changes(:upload_avatar, :person, changeset, :avatar,
+          key_function: &key_function/1
+        )
+        |> Upload.Multi.create_variant(
+          fn ctx -> ctx.upload_avatar.avatar end,
+          :small,
+          &small_transform/3
+        )
+        |> Repo.transaction()
+
+      person = Repo.one(Person) |> Repo.preload(:avatar)
+      assert person.avatar
+
+      changeset = Person.changeset(person, %{})
+
+      {:ok, _} =
+        Ecto.Multi.new()
+        |> Ecto.Multi.update(:update_person, changeset)
+        |> Upload.Multi.handle_changes(:upload_avatar, :update_person, changeset, :avatar,
+          key_function: &key_function/1
+        )
+        |> Repo.transaction()
+
+      person = Repo.one(Person) |> Repo.preload(:avatar)
+      assert person.avatar
+    end
   end
 
   describe "create_variant" do
