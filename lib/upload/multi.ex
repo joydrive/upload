@@ -120,11 +120,11 @@ defmodule Upload.Multi do
 
       record = repo.preload(record, [field])
 
-      handle_changeset_changes(repo, changeset, field, record, opts)
+      handle_changeset_changes(repo, changeset, field, record, changes, opts)
     end)
   end
 
-  defp handle_changeset_changes(repo, changeset, field, record, opts) do
+  defp handle_changeset_changes(repo, changeset, field, record, multi_changes, opts) do
     key_function = key_function_from_opts(opts)
     validate_function = validate_function_from_opts(opts)
 
@@ -146,7 +146,7 @@ defmodule Upload.Multi do
         record_changeset.changes
         |> Enum.reduce(Ecto.Multi.new(), fn {changed_field, change}, multi ->
           # Deletes if the change is 'nil', uploads otherwise.
-          handle_change({changed_field, change}, multi, changeset, opts)
+          handle_change({changed_field, change}, multi, changeset, multi_changes, opts)
         end)
         |> Multi.update("#{field}_attach_blob", record_changeset)
         |> repo.transaction()
@@ -187,7 +187,7 @@ defmodule Upload.Multi do
 
   # We're setting the upload field to nil so let's check
   # if the existing field is set and delete it if so.
-  defp handle_change({field, nil}, multi, changeset, _opts) do
+  defp handle_change({field, nil}, multi, changeset, _multi_changes, _opts) do
     case Map.get(changeset.data, field) do
       %Upload.Blob{} = blob -> delete_blob(multi, :delete_blob, blob)
       _ -> multi
@@ -196,12 +196,24 @@ defmodule Upload.Multi do
 
   # We're setting the upload field so let's check
   # if the existing field is set and delete it if so.
-  defp handle_change({field, change}, multi, changeset, opts) do
-    multi = handle_change({field, nil}, multi, changeset, opts)
+  defp handle_change({field, change}, multi, changeset, multi_changes, opts) do
+    multi = handle_change({field, nil}, multi, changeset, multi_changes, opts)
 
     blob = Ecto.Changeset.apply_changes(change)
 
-    upload_blob(multi, field, blob, opts)
+    multi
+    |> upload_blob(field, blob, opts)
+    |> on_upload_callback(field, multi_changes, opts)
+  end
+
+  defp on_upload_callback(multi, field, multi_changes, opts) do
+    if opts[:on_upload] do
+      Multi.run(multi, "#{field}_on_upload", fn repo, changes ->
+        opts[:on_upload].(repo, Map.merge(multi_changes, changes))
+      end)
+    else
+      multi
+    end
   end
 
   @doc """
