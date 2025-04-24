@@ -6,8 +6,11 @@ defmodule Upload.MultiTest do
   alias Upload.Test.Repo
 
   import Ecto.Multi
-  import Upload.Multi
+  import ExUnit.CaptureLog
   import Mock
+  import Upload.Multi
+
+  require Logger
 
   @path "test/fixtures/image.jpg"
   @upload %Plug.Upload{path: @path, filename: "image.jpg"}
@@ -126,6 +129,15 @@ defmodule Upload.MultiTest do
 
     assert person.avatar
     assert person.avatar.key in list_uploaded_keys()
+  end
+
+  test "invokes the on_upload callback" do
+    logs =
+      capture_log(fn ->
+        {:ok, _} = insert_person(%{avatar: @upload})
+      end)
+
+    assert logs =~ "on_upload called"
   end
 
   test "sets the ACL to public" do
@@ -343,7 +355,11 @@ defmodule Upload.MultiTest do
     |> Ecto.Multi.insert(:insert_person, changeset)
     |> Upload.Multi.handle_changes(:person, :insert_person, changeset, :avatar,
       key_function: &key_function/1,
-      canned_acl: :public
+      canned_acl: :public,
+      on_upload: fn _repo, _changes ->
+        Logger.info("on_upload called")
+        {:ok, nil}
+      end
     )
     |> Repo.transaction()
     |> case do
