@@ -108,9 +108,6 @@ defmodule Upload.Multi do
     validating the file format or size of the upload.
   """
   def handle_changes(multi, name, subject, changeset, field, opts \\ []) do
-    key_function = key_function_from_opts(opts)
-    validate_function = validate_function_from_opts(opts)
-
     Multi.run(multi, name, fn repo, changes ->
       # This code is run after the record in inserted in the Multi pipeline.
       # We can use the record ID here to upload the photo.
@@ -123,28 +120,41 @@ defmodule Upload.Multi do
 
       record = repo.preload(record, [field])
 
-      record_changeset =
-        record
-        |> Ecto.Changeset.cast(%{field => Map.get(changeset.params || %{}, to_string(field))}, [])
-        |> Upload.Changeset.cast_attachment(field,
-          key_function: fn _ ->
-            key_function.(record)
-          end
-        )
-        |> validate_function.(field)
-
-      record_changeset.changes
-      |> Enum.reduce(Ecto.Multi.new(), fn {changed_field, change}, multi ->
-        # Deletes if the change is 'nil', uploads otherwise.
-        handle_change({changed_field, change}, multi, changeset, opts)
-      end)
-      |> Multi.update("#{field}_attach_blob", record_changeset)
-      |> repo.transaction()
-      |> case do
-        {:ok, result} -> {:ok, result["#{field}_attach_blob"]}
-        {:error, _stage, changeset, _rest} -> {:error, changeset}
-      end
+      handle_changeset_changes(repo, changeset, field, record, opts)
     end)
+  end
+
+  defp handle_changeset_changes(repo, changeset, field, record, opts) do
+    key_function = key_function_from_opts(opts)
+    validate_function = validate_function_from_opts(opts)
+
+    case Map.get(changeset.params || %{}, to_string(field), :no_change) do
+      :no_change ->
+        {:ok, record}
+
+      new_value ->
+        record_changeset =
+          record
+          |> Ecto.Changeset.cast(%{field => new_value}, [])
+          |> Upload.Changeset.cast_attachment(field,
+            key_function: fn _ ->
+              key_function.(record)
+            end
+          )
+          |> validate_function.(field)
+
+        record_changeset.changes
+        |> Enum.reduce(Ecto.Multi.new(), fn {changed_field, change}, multi ->
+          # Deletes if the change is 'nil', uploads otherwise.
+          handle_change({changed_field, change}, multi, changeset, opts)
+        end)
+        |> Multi.update("#{field}_attach_blob", record_changeset)
+        |> repo.transaction()
+        |> case do
+          {:ok, result} -> {:ok, result["#{field}_attach_blob"]}
+          {:error, _stage, changeset, _rest} -> {:error, changeset}
+        end
+    end
   end
 
   defp validate_function_from_opts(opts) do
