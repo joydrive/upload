@@ -176,10 +176,10 @@ defmodule Upload.Multi do
     delete_existing_by_key(multi, repo, key_with_extension, existing_assoc?)
   end
 
-  defp delete_existing_by_key(multi, _, _, _existing_assoc? = true), do: multi
+  defp delete_existing_by_key(multi, _, _, true = _existing_assoc?), do: multi
   defp delete_existing_by_key(multi, _, nil, _), do: multi
 
-  defp delete_existing_by_key(multi, repo, key, _existing_assoc? = false) do
+  defp delete_existing_by_key(multi, repo, key, false = _existing_assoc?) do
     existing_blob = repo.get_by(Upload.Blob, key: key)
 
     if existing_blob do
