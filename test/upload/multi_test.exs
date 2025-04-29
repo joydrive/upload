@@ -254,7 +254,7 @@ defmodule Upload.MultiTest do
       refute key in list_uploaded_keys()
     end
 
-    test "with an existing blob with the same key, upserts by key" do
+    test "uploads successfully when there is an existing blob with the same key that is disassociated" do
       {:ok, person} = insert_person(%{avatar: @upload})
 
       assert person.avatar != nil
