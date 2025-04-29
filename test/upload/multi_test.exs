@@ -253,6 +253,29 @@ defmodule Upload.MultiTest do
       assert person.avatar == nil
       refute key in list_uploaded_keys()
     end
+
+    test "with an existing blob with the same key, upserts by key" do
+      {:ok, person} = insert_person(%{avatar: @upload})
+
+      assert person.avatar != nil
+      assert person.avatar.key == "uploads/users/#{person.id}/avatar.jpg"
+
+      {:ok, _} = update_person(person, %{avatar_id: nil})
+      person = person |> Repo.reload() |> Repo.preload(:avatar)
+      assert person.avatar == nil
+      assert person.avatar_id == nil
+
+      # Ensure the blob record still exists and is orphaned.
+      assert Repo.aggregate(Upload.Blob, :count) == 1
+
+      {:ok, _} = update_person(person, %{avatar: @upload})
+      person = person |> Repo.reload() |> Repo.preload(:avatar)
+      assert person.avatar != nil
+      assert person.avatar.key == "uploads/users/#{person.id}/avatar.jpg"
+
+      # Ensure only blob record exists.
+      assert Repo.aggregate(Upload.Blob, :count) == 1
+    end
   end
 
   test "create a variant of an upload" do

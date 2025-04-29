@@ -10,6 +10,6 @@ defmodule Upload.Test.Person do
   end
 
   def changeset(person, attrs \\ %{}) do
-    cast(person, attrs, [])
+    cast(person, attrs, [:avatar_id])
   end
 end
