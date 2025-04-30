@@ -96,6 +96,17 @@ defmodule Upload.Blob do
 
   defp add_extension_from_mime(changeset), do: changeset
 
+  def key_with_extension(%__MODULE__{key: key, content_type: content_type})
+      when not is_nil(key) and not is_nil(content_type) do
+    extension = MIME.extensions(content_type) |> List.first()
+
+    if extension do
+      {:ok, key <> "." <> extension}
+    else
+      {:error, "Could not set the extension from the given MIME type: '#{content_type}'"}
+    end
+  end
+
   @doc false
   def change_blob(%Stat{} = stat, key) do
     changeset(

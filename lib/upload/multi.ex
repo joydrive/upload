@@ -125,7 +125,7 @@ defmodule Upload.Multi do
   end
 
   defp handle_changeset_changes(repo, changeset, field, record, multi_changes, opts) do
-    key_function = key_function_from_opts(opts)
+    key = key_function_from_opts(opts).(record)
     validate_function = validate_function_from_opts(opts)
 
     case Map.get(changeset.params || %{}, to_string(field), :no_change) do
@@ -137,14 +137,20 @@ defmodule Upload.Multi do
           record
           |> Ecto.Changeset.cast(%{field => new_value}, [])
           |> Upload.Changeset.cast_attachment(field,
-            key_function: fn _ ->
-              key_function.(record)
-            end
+            key_function: fn _ -> key end
           )
           |> validate_function.(field)
 
+        multi =
+          maybe_delete_existing_by_key(
+            Ecto.Multi.new(),
+            repo,
+            record_changeset,
+            field
+          )
+
         record_changeset.changes
-        |> Enum.reduce(Ecto.Multi.new(), fn {changed_field, change}, multi ->
+        |> Enum.reduce(multi, fn {changed_field, change}, multi ->
           # Deletes if the change is 'nil', uploads otherwise.
           handle_change({changed_field, change}, multi, changeset, multi_changes, opts)
         end)
@@ -154,6 +160,32 @@ defmodule Upload.Multi do
           {:ok, result} -> {:ok, result["#{field}_attach_blob"]}
           {:error, _stage, changeset, _rest} -> {:error, changeset}
         end
+    end
+  end
+
+  # If there's an existing blob with the same key, the call to put_assoc for the
+  # blob field will not delete it since it's not associated. This code ensures
+  # that if it's not associated we will delete it with a separate database query
+  # so a foreign key constraint on the key is not raised.
+  defp maybe_delete_existing_by_key(multi, repo, record_changeset, field) do
+    existing_assoc? = not is_nil(Map.get(record_changeset.data, field))
+
+    key_with_extension =
+      Map.get(Ecto.Changeset.get_field(record_changeset, field) || %{}, :key)
+
+    delete_existing_by_key(multi, repo, key_with_extension, existing_assoc?)
+  end
+
+  defp delete_existing_by_key(multi, _, _, true = _existing_assoc?), do: multi
+  defp delete_existing_by_key(multi, _, nil, _), do: multi
+
+  defp delete_existing_by_key(multi, repo, key, false = _existing_assoc?) do
+    existing_blob = repo.get_by(Upload.Blob, key: key)
+
+    if existing_blob do
+      delete_blob(multi, "remove_existing_blob", existing_blob)
+    else
+      multi
     end
   end
 
