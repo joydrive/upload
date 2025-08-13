@@ -463,7 +463,7 @@ defmodule Upload.Multi do
            {:ok, variant_path} <-
              call_transform_fn(original_blob.key, transform_fn, blob_path, variant, format),
            :ok <- cleanup(blob_path),
-           {:ok, blob} <- insert_variant(repo, original_blob, variant, variant_path),
+           {:ok, blob} <- insert_variant(repo, original_blob, variant, variant_path, opts),
            {:ok, _} <- do_upload_blob(blob, opts),
            :ok <- cleanup(variant_path) do
         {:ok, blob}
@@ -499,12 +499,13 @@ defmodule Upload.Multi do
     end
   end
 
-  defp insert_variant(repo, original_blob, variant, variant_path) do
+  defp insert_variant(repo, original_blob, variant, variant_path, opts) do
     if original_blob.variant do
       raise "A variant of a blob can not be created for a blob that is already a variant"
     end
 
     original_key_without_ext = Path.rootname(original_blob.key)
+    tags = Keyword.get(opts, :tags, original_blob.tags)
 
     params =
       variant_path
@@ -514,7 +515,7 @@ defmodule Upload.Multi do
       |> Map.put(:original_blob_id, original_blob.id)
       |> Map.put(:key, original_key_without_ext <> "/" <> to_string(variant))
       |> Map.put(:filename, variant_filename(original_blob, variant))
-      |> Map.put(:tags, original_blob.tags)
+      |> Map.put(:tags, tags)
 
     changeset = Blob.changeset(%Blob{}, params)
 

@@ -145,6 +145,30 @@ defmodule Upload.MultiTest do
         )
         |> Repo.transaction()
     end
+
+    test "allows overriding tags" do
+      changeset = Person.changeset(%Person{}, %{avatar: @upload})
+
+      {:ok, _} =
+        Ecto.Multi.new()
+        |> Ecto.Multi.insert(:person, changeset)
+        |> Upload.Multi.handle_changes(:upload_avatar, :person, changeset, :avatar,
+          key_function: &key_function/1
+        )
+        |> Upload.Multi.create_variant(
+          fn ctx -> ctx.upload_avatar.avatar end,
+          :small,
+          &small_transform/3,
+          tags: %{"test" => "456"}
+        )
+        |> Repo.transaction()
+
+      person = Repo.one(Person) |> Repo.preload(avatar: :variants)
+      assert person.avatar.tags == %{}
+
+      variant = List.first(person.avatar.variants)
+      assert variant.tags == %{"test" => "456"}
+    end
   end
 
   test "upload/3" do
