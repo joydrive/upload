@@ -388,7 +388,7 @@ defmodule Upload.MultiTest do
     refute person.avatar_id
   end
 
-  describe "purge/3" do
+  describe "delete/3" do
     test "removes the record from the file_store storage" do
       assert {:ok, person} = insert_person(%{avatar: @upload})
       assert person.avatar.key in list_uploaded_keys()
@@ -427,6 +427,23 @@ defmodule Upload.MultiTest do
       :ok = Storage.delete_all()
 
       assert {:ok, _} = delete_person(person)
+    end
+
+    test "rolls back database deletion when the storage fails to delete" do
+      assert {:ok, person} = insert_person(%{avatar: @upload})
+
+      {:ok, [blob_variant]} =
+        Upload.create_variant(person.avatar, "small", &small_transform/3)
+
+      with_mock(Storage, [:passthrough],
+        delete_all: fn _opts -> {:error, "Failed to delete files"} end
+      ) do
+        assert {:error, :avatar, "Failed to delete files", _} = delete_person(person)
+
+        person = Repo.get(Person, person.id) |> Repo.preload(avatar: :variants)
+        
+        assert blob_variant.id in Enum.map(person.avatar.variants, & &1.id)
+      end
     end
   end
 

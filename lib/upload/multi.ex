@@ -9,6 +9,8 @@ defmodule Upload.Multi do
   alias Upload.Blob
   alias Upload.Storage
 
+  import Ecto.Query
+
   @doc """
   Upload a blob to storage.
 
@@ -282,11 +284,18 @@ defmodule Upload.Multi do
     repo = Upload.Config.repo()
     blob = repo.preload(blob, :variants)
 
-    Enum.each(blob.variants, fn variant ->
-      {:ok, _blob_variant} = do_delete(variant)
-    end)
+    if blob.variants == [] do
+      :ok
+    else
+      Blob
+      |> where([b], b.original_blob_id == ^blob.id)
+      |> repo.delete_all()
 
-    :ok
+      case Storage.delete_all(prefix: Path.rootname(blob.key) <> "/") do
+        :ok -> :ok
+        {:error, error} -> {:error, error}
+      end
+    end
   end
 
   def remove_variants(multi, original_blob, variant, formats) do
