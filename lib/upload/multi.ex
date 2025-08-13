@@ -14,8 +14,7 @@ defmodule Upload.Multi do
 
   ## Options
 
-  - `canned_acl` - The canned ACL to use with S3 if using S3 as the storage
-    backend.
+  - `tags` - The tags to apply to the uploaded blob.
 
   """
   def upload_blob(multi, name, blob, opts \\ [])
@@ -35,20 +34,12 @@ defmodule Upload.Multi do
   defp do_upload_blob(%NotLoaded{} = blob, _opts), do: {:ok, blob}
   defp do_upload_blob(%Blob{path: nil} = blob, _opts), do: {:ok, blob}
 
-  defp do_upload_blob(%Blob{path: path, key: key} = blob, opts) when is_binary(key) do
-    metadata = %{key: key, path: path}
-
-    :telemetry.span(
-      [:upload, :storage_upload],
-      metadata,
-      fn ->
-        {with(
-           :ok <- Storage.upload(path, key),
-           :ok <- Upload.put_access_control_list(blob, opts[:canned_acl] || :private),
-           do: {:ok, blob}
-         ), metadata}
-      end
-    )
+  defp do_upload_blob(%Blob{path: path, key: key, tags: tags} = blob, _opts)
+       when is_binary(key) do
+    with :ok <- Storage.upload(path, key),
+         :ok <- Storage.set_tags(key, tags) do
+      {:ok, blob}
+    end
   end
 
   @doc """
@@ -56,8 +47,7 @@ defmodule Upload.Multi do
 
    ## Options
 
-  - `canned_acl` - The canned ACL to use with S3 if using S3 as the storage
-    backend.
+  - `tags` - The tags to apply to the uploaded blob.
   """
   def upload_variants(multi, name, fun, variants, transform_fn, opts \\ [])
       when is_function(fun) do
@@ -99,8 +89,7 @@ defmodule Upload.Multi do
 
   ## Options
 
-  - `canned_acl` - The canned ACL to use with S3 if using S3 as the storage
-    backend.
+  - `tags` - The tags to apply to the uploaded blob.
   - `key_function` - A function which recieves the schema specified by `subject`
     from the multi and must return a file storage path without the extension.
   - `validate` - A 2 arity function which recieves the changeset and the field
@@ -137,7 +126,8 @@ defmodule Upload.Multi do
           record
           |> Ecto.Changeset.cast(%{field => new_value}, [])
           |> Upload.Changeset.cast_attachment(field,
-            key_function: fn _ -> key end
+            key_function: fn _ -> key end,
+            tags: opts[:tags] || %{}
           )
           |> validate_function.(field)
 
@@ -283,21 +273,9 @@ defmodule Upload.Multi do
     repo = Upload.Config.repo()
 
     with :ok <- remove_variants(blob),
-         :ok <- storage_delete_with_telemetry(key) do
+         :ok <- Storage.delete(key) do
       repo.delete(blob)
     end
-  end
-
-  defp storage_delete_with_telemetry(key) do
-    metadata = %{key: key}
-
-    :telemetry.span(
-      [:upload, :storage_delete],
-      metadata,
-      fn ->
-        {Storage.delete(key), metadata}
-      end
-    )
   end
 
   defp remove_variants(blob) do
@@ -343,8 +321,7 @@ defmodule Upload.Multi do
 
   ## Options
 
-  - `canned_acl` - The canned ACL to use with S3 if using S3 as the storage
-    backend.
+  - `tags` - The tags to apply to the uploaded blob.
 
   """
   def create_variant(multi, fun, variant, transform_fn, opts)
@@ -398,8 +375,7 @@ defmodule Upload.Multi do
 
   ## Options
 
-  - `canned_acl` - The canned ACL to use with S3 if using S3 as the storage
-    backend.
+  - `tags` - The tags to apply to the uploaded blob.
   """
   def create_variants(multi, fun, variants, transform_fn, opts)
       when is_function(fun, 1) and is_function(transform_fn, 3) do
@@ -437,6 +413,31 @@ defmodule Upload.Multi do
         )
       end)
     end)
+  end
+
+  def update_tags(multi, blob, tags) do
+    Multi.run(multi, "update_tags_blob_#{blob.id}", fn _repo, _ ->
+      with {:ok, blob} <- set_database_tags(blob, tags),
+           {:ok, blob} <- set_storage_tags(blob, tags) do
+        {:ok, blob}
+      end
+    end)
+  end
+
+  defp set_database_tags(blob, tags) do
+    changeset = Blob.changeset(blob, %{tags: tags})
+
+    case Upload.Config.repo().update(changeset) do
+      {:ok, updated_blob} -> {:ok, updated_blob}
+      {:error, changeset} -> {:error, changeset}
+    end
+  end
+
+  defp set_storage_tags(blob, tags) do
+    case Upload.Storage.set_tags(blob.key, tags) do
+      :ok -> {:ok, blob}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp download_and_insert_variant(
@@ -504,6 +505,7 @@ defmodule Upload.Multi do
       |> Map.put(:original_blob_id, original_blob.id)
       |> Map.put(:key, original_key_without_ext <> "/" <> to_string(variant))
       |> Map.put(:filename, variant_filename(original_blob, variant))
+      |> Map.put(:tags, original_blob.tags)
 
     changeset = Blob.changeset(%Blob{}, params)
 
@@ -535,23 +537,12 @@ defmodule Upload.Multi do
   end
 
   defp download_file(key, path) do
-    metadata = %{key: key, path: path}
+    case Upload.Storage.download(key, path) do
+      :ok ->
+        :ok
 
-    :telemetry.span(
-      [:upload, :storage_download],
-      metadata,
-      fn ->
-        result =
-          case Upload.Storage.download(key, path) do
-            :ok ->
-              :ok
-
-            {:error, reason} ->
-              {:error, %Upload.DownloadError{reason: reason, key: key, path: path}}
-          end
-
-        {result, metadata}
-      end
-    )
+      {:error, reason} ->
+        {:error, %Upload.DownloadError{reason: reason, key: key, path: path}}
+    end
   end
 end

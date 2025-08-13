@@ -25,6 +25,7 @@ defmodule Upload.Migrations do
       add(:checksum, :string, null: false)
 
       add(:variant, :string)
+      add(:tags, :jsonb, default: "{}", null: false)
 
       add(:original_blob_id, references(:blobs, type: :binary_id, on_delete: :delete_all),
         type: :binary_id

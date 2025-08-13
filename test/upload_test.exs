@@ -216,12 +216,19 @@ defmodule UploadTest do
     end
   end
 
-  describe "put_access_control_list/2" do
-    test "can set the ACL for an uploaded blob" do
+  describe "set_tags/1" do
+    test "sets the tags for an uploaded blob" do
       assert {:ok, person} = insert_person(%{avatar: @upload})
       assert person.avatar
 
-      :ok = Upload.put_access_control_list(person.avatar, "public_read")
+      {:ok, _} = Upload.set_tags(person.avatar, %{"baz" => "qux", "foo" => "bar"})
+
+      person = Repo.reload(person) |> Repo.preload(:avatar)
+
+      assert person.avatar.tags == %{"baz" => "qux", "foo" => "bar"}
+
+      assert Upload.Storage.get_tags(person.avatar.key) ==
+               {:ok, %{"baz" => "qux", "foo" => "bar"}}
     end
   end
 

@@ -50,7 +50,7 @@ defmodule Upload.Mixfile do
       {:cloak, "~> 1.1.4"},
       {:ecto_sql, "~> 3.8"},
       {:ecto, "~> 3.6"},
-      {:file_store, git: "https://github.com/joydrive/file_store.git", sha: "2ce496f"},
+      {:file_store, git: "https://github.com/joydrive/file_store.git", branch: "jd-object-tagging"},
       {:file_type, "~> 0.1"},
       {:image, "~> 0.48"},
       {:plug, "~> 1.13"},

@@ -29,7 +29,7 @@ defmodule Upload.Blob do
           original_blob: Upload.Blob.t() | Ecto.Association.NotLoaded.t() | nil
         }
 
-  @fields ~w(key filename content_type byte_size checksum path metadata variant original_blob_id)a
+  @fields ~w(key filename content_type byte_size checksum path metadata variant original_blob_id tags)a
   @required_fields @fields -- ~w(path variant original_blob_id)a
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -41,8 +41,8 @@ defmodule Upload.Blob do
     field :checksum, :string
     field :metadata, :map, default: %{}
     field :path, :string, virtual: true
-
     field :variant, :string
+    field :tags, :map, default: %{}
 
     has_many :variants, Upload.Blob,
       foreign_key: :original_blob_id,
@@ -108,10 +108,12 @@ defmodule Upload.Blob do
   end
 
   @doc false
-  def change_blob(%Stat{} = stat, key) do
+  def change_blob(%Stat{} = stat, key, tags) do
     changeset(
       %__MODULE__{},
-      Map.from_struct(stat) |> Map.put(:key, key)
+      Map.from_struct(stat)
+      |> Map.put(:key, key)
+      |> Map.put(:tags, tags)
     )
   end
 
