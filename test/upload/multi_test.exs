@@ -441,7 +441,7 @@ defmodule Upload.MultiTest do
         assert {:error, :avatar, "Failed to delete files", _} = delete_person(person)
 
         person = Repo.get(Person, person.id) |> Repo.preload(avatar: :variants)
-        
+
         assert blob_variant.id in Enum.map(person.avatar.variants, & &1.id)
       end
     end
