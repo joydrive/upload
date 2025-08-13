@@ -330,7 +330,8 @@ defmodule Upload.Multi do
 
   ## Options
 
-  - `tags` - The tags to apply to the uploaded blob.
+  - `tags` - The tags to apply to the uploaded blob. By default the tags of the
+    original blob are used.
 
   """
   def create_variant(multi, fun, variant, transform_fn, opts)
@@ -384,7 +385,8 @@ defmodule Upload.Multi do
 
   ## Options
 
-  - `tags` - The tags to apply to the uploaded blob.
+  - `tags` - The tags to apply to the uploaded blob. By default the tags of the
+    original blob are used.
   """
   def create_variants(multi, fun, variants, transform_fn, opts)
       when is_function(fun, 1) and is_function(transform_fn, 3) do
