@@ -19,6 +19,12 @@ defmodule Upload.OpenTelemetry do
         [:upload, :storage_download, :start],
         [:upload, :storage_download, :stop],
         [:upload, :storage_download, :exception],
+        [:upload, :storage_delete, :start],
+        [:upload, :storage_delete, :stop],
+        [:upload, :storage_delete, :exception],
+        [:upload, :storage_delete_all, :start],
+        [:upload, :storage_delete_all, :stop],
+        [:upload, :storage_delete_all, :exception],
         [:upload, :analyze, :start],
         [:upload, :analyze, :stop],
         [:upload, :analyze, :exception],
@@ -79,12 +85,13 @@ defmodule Upload.OpenTelemetry do
     :ok
   end
 
-  defp span_name([:upload, :transform, :start]), do: "Upload.transform"
-  defp span_name([:upload, :storage_upload, :start]), do: "Upload.storage_upload"
-  defp span_name([:upload, :storage_download, :start]), do: "Upload.storage_download"
-  defp span_name([:upload, :storage_delete, :start]), do: "Upload.storage_delete"
-  defp span_name([:upload, :analyze, :start]), do: "Upload.analyze"
-  defp span_name([:upload, :stat, :start]), do: "Upload.stat"
+  defp span_name([:upload, :transform, :start]), do: "upload.transform"
+  defp span_name([:upload, :storage_upload, :start]), do: "upload.storage_upload"
+  defp span_name([:upload, :storage_download, :start]), do: "upload.storage_download"
+  defp span_name([:upload, :storage_delete, :start]), do: "upload.storage_delete"
+  defp span_name([:upload, :storage_delete_all, :start]), do: "upload.storage_delete_all"
+  defp span_name([:upload, :analyze, :start]), do: "upload.analyze"
+  defp span_name([:upload, :stat, :start]), do: "upload.stat"
 
   defp add_start_attributes([:upload, :transform, :start], %{
          original_blob_key: original_blob_key,
@@ -92,7 +99,7 @@ defmodule Upload.OpenTelemetry do
          variant: variant,
          format: format
        }) do
-    OpenTelemetry.Span.set_attributes(OpenTelemetry.Tracer.current_span_ctx(),
+    set_attributes(
       "upload.transform.original_blob_key": original_blob_key,
       "upload.transform.blob_path": blob_path,
       "upload.transform.variant": variant,
@@ -101,23 +108,25 @@ defmodule Upload.OpenTelemetry do
   end
 
   defp add_start_attributes([:upload, :storage_upload, :start], %{key: key, path: path}) do
-    OpenTelemetry.Span.set_attributes(OpenTelemetry.Tracer.current_span_ctx(),
+    set_attributes(
       "upload.storage_upload.key": key,
       "upload.storage_upload.path": path
     )
   end
 
   defp add_start_attributes([:upload, :storage_download, :start], %{key: key, path: path}) do
-    OpenTelemetry.Span.set_attributes(OpenTelemetry.Tracer.current_span_ctx(),
+    set_attributes(
       "upload.storage_download.key": key,
       "upload.storage_download.path": path
     )
   end
 
   defp add_start_attributes([:upload, :storage_delete, :start], %{key: key}) do
-    OpenTelemetry.Span.set_attributes(OpenTelemetry.Tracer.current_span_ctx(),
-      "upload.storage_delete.key": key
-    )
+    set_attributes("upload.storage_delete.key": key)
+  end
+
+  defp add_start_attributes([:upload, :storage_delete_all, :start], %{opts: opts}) do
+    set_attributes("upload.storage_delete_all.prefix": opts[:prefix])
   end
 
   defp add_start_attributes([:upload, :analyze, :start], %{
@@ -125,7 +134,7 @@ defmodule Upload.OpenTelemetry do
          path: path,
          content_type: content_type
        }) do
-    OpenTelemetry.Span.set_attributes(OpenTelemetry.Tracer.current_span_ctx(),
+    set_attributes(
       "upload.analyze.analyzer": analyzer,
       "upload.analyze.path": path,
       "upload.analyze.content_type": content_type
@@ -144,7 +153,7 @@ defmodule Upload.OpenTelemetry do
            metadata: metadata
          }
        }) do
-    OpenTelemetry.Span.set_attributes(OpenTelemetry.Tracer.current_span_ctx(),
+    set_attributes(
       "upload.stat.path": path,
       "upload.stat.filename": filename,
       "upload.stat.checksum": checksum,
@@ -152,8 +161,7 @@ defmodule Upload.OpenTelemetry do
       "upload.stat.content_type": content_type
     )
 
-    OpenTelemetry.Span.set_attributes(
-      OpenTelemetry.Tracer.current_span_ctx(),
+    set_attributes(
       Enum.map(metadata, fn {key, value} ->
         {"upload.stat.metadata." <> to_string(key), to_string(value)}
       end)
@@ -161,4 +169,10 @@ defmodule Upload.OpenTelemetry do
   end
 
   defp add_stop_attributes(_, _), do: :ok
+
+  defp set_attributes(attributes) do
+    attributes = [{"operation.name", :upload}] ++ attributes
+
+    OpenTelemetry.Span.set_attributes(OpenTelemetry.Tracer.current_span_ctx(), attributes)
+  end
 end

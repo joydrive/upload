@@ -30,7 +30,15 @@ defmodule Upload.FileStore.Middleware.Telemetry do
     end
 
     def delete_all(store, opts) do
-      FileStore.delete_all(store.__next__, opts)
+      metadata = %{opts: opts}
+
+      :telemetry.span(
+        [:upload, :storage_delete_all],
+        metadata,
+        fn ->
+          {FileStore.delete_all(store.__next__, opts), metadata}
+        end
+      )
     end
 
     def write(store, key, content, opts) do
