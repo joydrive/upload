@@ -428,9 +428,9 @@ defmodule Upload.Multi do
 
   def update_tags(multi, blob, tags) do
     Multi.run(multi, "update_tags_blob_#{blob.id}", fn _repo, _ ->
-      with {:ok, blob} <- set_database_tags(blob, tags),
-           {:ok, blob} <- set_storage_tags(blob, tags) do
-        {:ok, blob}
+      case set_database_tags(blob, tags) do
+        {:ok, blob} -> set_storage_tags(blob, tags)
+        {:error, error} -> {:error, error}
       end
     end)
   end
