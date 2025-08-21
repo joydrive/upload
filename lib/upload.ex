@@ -177,34 +177,46 @@ defmodule Upload do
   end
 
   @doc """
-  Set the visiblity of a `Blob` using the struct or it's key.
+  Set the tags on a blob. This is useful for categorizing or managing blobs in
+  storage.
 
-  > #### Note {: .warning}
-  >
-  > This only applies when Upload is configured to use S3.
-
-  Supported canned access control lists for Amazon S3 are:
-
-  | ACL                          | Permissions Added to ACL                                                        |
-  |------------------------------|---------------------------------------------------------------------------------|
-  | private                      | Owner gets `FULL_CONTROL`. No one else has access rights (default).             |
-  | public_read                  | Owner gets `FULL_CONTROL`. The `AllUsers` group gets READ access.               |
-  | public_read_write            | Owner gets `FULL_CONTROL`. The `AllUsers` group gets `READ` and `WRITE` access. Granting this on a bucket is generally not recommended. |
-  | authenticated_read           | Owner gets `FULL_CONTROL`. The `AuthenticatedUsers` group gets `READ` access.   |
-  | bucket_owner_read            | Object owner gets `FULL_CONTROL`. Bucket owner gets `READ` access.              |
-  | bucket_owner_full_control    | Both the object owner and the bucket owner get `FULL_CONTROL` over the object.  |
-
-  ## Example
-
-      iex> Upload.put_access_control_list(person.avatar, :public_read)
-      :ok
+  Tags can be used by permission policies or lifecycle rules when using S3 as
+  the storage backend.
   """
-  @spec put_access_control_list(Blob.t() | Blob.key(), String.t()) :: :ok | {:error, term()}
-  def put_access_control_list(%Blob{key: key} = _blob, canned_acl) do
-    put_access_control_list(key, canned_acl)
+  @spec set_tags(Blob.t(), Enumerable.t()) :: {:ok, Blob.t()} | {:error, term()}
+  def set_tags(blob, tags) do
+    result_id =
+      "update_tags_blob_#{blob.id || raise ArgumentError, "Blob must have an ID to set tags"}"
+
+    Enum.each(tags, fn {key, value} ->
+      unless is_binary(key) and is_binary(value) do
+        raise ArgumentError, "Tags must be an enumerable with string keys and values"
+      end
+    end)
+
+    Ecto.Multi.new()
+    |> Upload.Multi.update_tags(blob, tags)
+    |> Upload.Config.repo().transaction()
+    |> case do
+      {:ok, %{^result_id => result}} ->
+        {:ok, result}
+
+      {:error, _stage, error, _context} ->
+        {:error, error}
+    end
   end
 
-  def put_access_control_list(key, canned_acl) do
-    Upload.Storage.put_access_control_list(key, [{:acl, canned_acl}])
+  def get_public_url(%Blob{key: key}) do
+    Upload.Storage.get_public_url(key)
+  end
+
+  @doc """
+  Returns a signed URL which can be used to provide temporary, time-limited
+  access to a specific object.
+
+  Returns the public URL when not using S3 as the storage backend.
+  """
+  def get_signed_url(%Blob{key: key}) do
+    Upload.Storage.get_signed_url(key)
   end
 end

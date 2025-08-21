@@ -45,6 +45,32 @@ defmodule Upload.MultiTest do
         |> Repo.transaction()
     end
 
+    test "can add optional tags to blobs which propagate by default to it's variants" do
+      changeset = Person.changeset(%Person{}, %{avatar: @upload})
+
+      {:ok, _} =
+        Ecto.Multi.new()
+        |> Ecto.Multi.insert(:person, changeset)
+        |> Upload.Multi.handle_changes(:upload_avatar, :person, changeset, :avatar,
+          key_function: &key_function/1,
+          tags: %{"test" => "123"}
+        )
+        |> Upload.Multi.create_variant(
+          fn ctx -> ctx.upload_avatar.avatar end,
+          :small,
+          &small_transform/3
+        )
+        |> Repo.transaction()
+
+      person = Repo.one(Person) |> Repo.preload(avatar: :variants)
+      assert person.avatar.tags == %{"test" => "123"}
+      assert Storage.get_tags(person.avatar.key) == {:ok, %{"test" => "123"}}
+
+      variant = List.first(person.avatar.variants)
+      assert variant.tags == %{"test" => "123"}
+      assert Storage.get_tags(variant.key) == {:ok, %{"test" => "123"}}
+    end
+
     test "does nothing when provided a changeset with empty changes for a record with an existing upload" do
       changeset = Person.changeset(%Person{}, %{avatar: @upload})
 
@@ -119,6 +145,30 @@ defmodule Upload.MultiTest do
         )
         |> Repo.transaction()
     end
+
+    test "allows overriding tags" do
+      changeset = Person.changeset(%Person{}, %{avatar: @upload})
+
+      {:ok, _} =
+        Ecto.Multi.new()
+        |> Ecto.Multi.insert(:person, changeset)
+        |> Upload.Multi.handle_changes(:upload_avatar, :person, changeset, :avatar,
+          key_function: &key_function/1
+        )
+        |> Upload.Multi.create_variant(
+          fn ctx -> ctx.upload_avatar.avatar end,
+          :small,
+          &small_transform/3,
+          tags: %{"test" => "456"}
+        )
+        |> Repo.transaction()
+
+      person = Repo.one(Person) |> Repo.preload(avatar: :variants)
+      assert person.avatar.tags == %{}
+
+      variant = List.first(person.avatar.variants)
+      assert variant.tags == %{"test" => "456"}
+    end
   end
 
   test "upload/3" do
@@ -140,19 +190,45 @@ defmodule Upload.MultiTest do
     assert logs =~ "on_upload called"
   end
 
-  test "sets the ACL to public" do
-    assert {:ok, person} = insert_person(%{avatar: @upload})
-    assert person.avatar_id
+  describe "update_tags/3" do
+    test "updates the tags in the database and storage" do
+      {:ok, person} = insert_person(%{avatar: @upload})
 
-    with_mock(Storage, [:passthrough], put_access_control_list: fn _key, _acl -> :ok end) do
-      {:ok, person} = update_person(person, %{avatar: @upload})
+      assert person.avatar_id
 
-      assert person.avatar
-      assert person.avatar.key == "uploads/users/#{person.id}/avatar.jpg"
+      tags = %{"key1" => "value1", "key2" => "value2"}
 
-      assert_called(
-        Storage.put_access_control_list("uploads/users/#{person.id}/avatar.jpg", acl: :public)
-      )
+      {:ok, _} =
+        Ecto.Multi.new()
+        |> update_tags(person.avatar, tags)
+        |> Repo.transaction()
+
+      updated_blob = Repo.get(Upload.Blob, person.avatar.id)
+
+      assert updated_blob.tags == tags
+      assert Storage.get_tags(updated_blob.key) == {:ok, tags}
+    end
+
+    test "rolls back the database change if storage fails" do
+      {:ok, person} = insert_person(%{avatar: @upload})
+
+      assert person.avatar_id
+
+      tags = %{"key1" => "value1", "key2" => "value2"}
+
+      with_mock(Storage, [:passthrough],
+        set_tags: fn _key, _tags -> {:error, "Failed to set tags"} end
+      ) do
+        {:error, _, _, _} =
+          Ecto.Multi.new()
+          |> update_tags(person.avatar, tags)
+          |> Repo.transaction()
+
+        updated_blob = Repo.get(Upload.Blob, person.avatar.id)
+
+        assert updated_blob.tags == %{}
+        assert Storage.get_tags(updated_blob.key) == {:ok, %{}}
+      end
     end
   end
 
@@ -317,12 +393,26 @@ defmodule Upload.MultiTest do
     assert person.avatar.key in list_uploaded_keys()
   end
 
+  describe "create_variant/3" do
+    test "creates a variant with the same tags as the original by default" do
+      assert {:ok, person} = insert_person(%{avatar: @upload})
+
+      assert person.avatar
+
+      {:ok, avatar} = Upload.set_tags(person.avatar, %{"key" => "value"})
+      {:ok, [blob_variant]} = Upload.create_variant(avatar, "small", &small_transform/3)
+
+      assert blob_variant.key in list_uploaded_keys()
+      assert blob_variant.tags == %{"key" => "value"}
+    end
+  end
+
   test "upload/3 when avatar is not provided" do
     assert {:ok, person} = insert_person(%{})
     refute person.avatar_id
   end
 
-  describe "purge/3" do
+  describe "delete/3" do
     test "removes the record from the file_store storage" do
       assert {:ok, person} = insert_person(%{avatar: @upload})
       assert person.avatar.key in list_uploaded_keys()
@@ -362,6 +452,23 @@ defmodule Upload.MultiTest do
 
       assert {:ok, _} = delete_person(person)
     end
+
+    test "rolls back database deletion when the storage fails to delete" do
+      assert {:ok, person} = insert_person(%{avatar: @upload})
+
+      {:ok, [blob_variant]} =
+        Upload.create_variant(person.avatar, "small", &small_transform/3)
+
+      with_mock(Storage, [:passthrough],
+        delete_all: fn _opts -> {:error, "Failed to delete files"} end
+      ) do
+        assert {:error, :avatar, "Failed to delete files", _} = delete_person(person)
+
+        person = Repo.get(Person, person.id) |> Repo.preload(avatar: :variants)
+
+        assert blob_variant.id in Enum.map(person.avatar.variants, & &1.id)
+      end
+    end
   end
 
   defp delete_person(person) do
@@ -378,7 +485,6 @@ defmodule Upload.MultiTest do
     |> Ecto.Multi.insert(:insert_person, changeset)
     |> Upload.Multi.handle_changes(:person, :insert_person, changeset, :avatar,
       key_function: &key_function/1,
-      canned_acl: :public,
       on_upload: fn _repo, _changes ->
         Logger.info("on_upload called")
         {:ok, nil}
@@ -397,8 +503,7 @@ defmodule Upload.MultiTest do
     Ecto.Multi.new()
     |> Ecto.Multi.update(:update_person, changeset)
     |> Upload.Multi.handle_changes(:person, :update_person, changeset, :avatar,
-      key_function: &key_function/1,
-      canned_acl: :public
+      key_function: &key_function/1
     )
     |> Repo.transaction()
     |> case do

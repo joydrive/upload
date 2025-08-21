@@ -38,14 +38,14 @@ defmodule Upload.Changeset do
     terabyte: 1.0e12
   }
 
-  @spec put_attachment(changeset(), field(), Plug.Upload.t() | Upload.Stat.t(), String.t()) ::
+  @spec put_attachment(changeset(), field(), Plug.Upload.t() | Upload.Stat.t(), String.t(), map()) ::
           changeset()
-  def put_attachment(changeset, field, %Plug.Upload{} = upload, key) do
-    put_attachment(changeset, field, Upload.stat!(upload), key)
+  def put_attachment(changeset, field, %Plug.Upload{} = upload, key, tags) do
+    put_attachment(changeset, field, Upload.stat!(upload), key, tags)
   end
 
-  def put_attachment(changeset, field, %Upload.Stat{} = stat, key) do
-    put_assoc(changeset, field, Upload.Blob.change_blob(stat, key))
+  def put_attachment(changeset, field, %Upload.Stat{} = stat, key, tags) do
+    put_assoc(changeset, field, Upload.Blob.change_blob(stat, key, tags))
   end
 
   @spec put_attachment(changeset(), field(), Upload.Blob.t()) :: changeset()
@@ -62,6 +62,7 @@ defmodule Upload.Changeset do
     * `:key_function` - A 1-arity function that is given the changeset and is
       expected to return the path of the attachment in external storage without
       the file type extension.
+    * `:tags` - A map of tags to set on the blob. Defaults to an empty map.
 
   ## Example
 
@@ -73,10 +74,11 @@ defmodule Upload.Changeset do
   @spec cast_attachment(changeset(), field(), cast_opts()) :: changeset()
   def cast_attachment(changeset, field, opts \\ []) do
     key_function = key_function_from_opts(opts)
+    tags = Keyword.get(opts, :tags, %{})
 
     case Map.fetch(changeset.params, to_string(field)) do
       {:ok, %Plug.Upload{} = upload} ->
-        put_attachment(changeset, field, upload, key_function.(changeset))
+        put_attachment(changeset, field, upload, key_function.(changeset), tags)
 
       {:ok, path} when is_binary(path) ->
         case Upload.stat(path) do
@@ -86,7 +88,7 @@ defmodule Upload.Changeset do
             add_error(changeset, field, message, meta)
 
           {:ok, stat} ->
-            put_attachment(changeset, field, stat, key_function.(changeset))
+            put_attachment(changeset, field, stat, key_function.(changeset), tags)
         end
 
       {:ok, nil} ->
